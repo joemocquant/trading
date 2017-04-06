@@ -2,9 +2,8 @@ package poloniex
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"log"
+	log "logrus"
 	"poloniex/publicapi"
 	"poloniex/pushapi"
 	"sync"
@@ -28,6 +27,7 @@ type configuration struct {
 		Host                 string            `json:"host"`
 		Schema               map[string]string `json:"schema"`
 		MarketCheckPeriodMin int               `json:"market_check_period_min"`
+		LogLevel             string            `json:"log_level"`
 	} `json:"ingestion"`
 }
 
@@ -36,11 +36,28 @@ func init() {
 	content, err := ioutil.ReadFile("conf.json")
 
 	if err != nil {
-		log.Fatalf("loading configuration: %v", err)
+		log.WithField("error", err).Fatal("loading configuration")
 	}
 
 	if err := json.Unmarshal(content, &conf); err != nil {
-		log.Fatalf("loading configuration: %v", err)
+		log.WithField("error", err).Fatal("loading configuration")
+	}
+
+	switch conf.Ingestion.LogLevel {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	case "fatal":
+		log.SetLevel(log.FatalLevel)
+	case "panic":
+		log.SetLevel(log.PanicLevel)
+	default:
+		log.SetLevel(log.WarnLevel)
 	}
 
 	publicClient = publicapi.NewPublicClient()
@@ -52,13 +69,13 @@ func init() {
 	})
 
 	if err != nil {
-		log.Fatal(err)
+		log.WithField("error", err).Fatal("influxDBClient.NewHTTPClient")
 	}
 
 	pushClient, err = pushapi.NewPushClient()
 
 	if err != nil {
-		log.Fatal(err)
+		log.WithField("error", err).Fatal("pushapi.NewPushClient")
 	}
 
 	marketUpdaters = make(map[string]pushapi.MarketUpdater)
@@ -68,8 +85,8 @@ func Ingest() {
 
 	for {
 		updateMarkets()
-		<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin)
-            * time.Minute)
+		<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin) *
+			time.Minute)
 	}
 }
 
@@ -78,7 +95,7 @@ func updateMarkets() {
 	tickers, err := publicClient.GetTickers()
 
 	for err != nil {
-		fmt.Printf("ingestion.updateMarkets: publicClient.GetTickers: %v\n", err)
+		log.WithField("error", err).Error("ingestion.updateMarkets: publicClient.GetTickers")
 		tickers, err = publicClient.GetTickers()
 	}
 
@@ -92,8 +109,11 @@ func updateMarkets() {
 			marketUpdater, err := pushClient.SubscribeMarket(currencyPair)
 
 			if err != nil {
-				fmt.Printf("ingestion.updateMarkets: pushClient.SubscribeMarket (%s): %v\n",
-					currencyPair, err)
+
+				log.WithFields(log.Fields{
+					"currencyPair": currencyPair,
+					"error":        err,
+				}).Error("ingestion.updateMarkets: pushClient.SubscribeMarket")
 				continue
 			}
 
@@ -115,21 +135,25 @@ func dbWriter(marketUpdater pushapi.MarketUpdater, currencyPair string) {
 				Precision: "ns",
 			})
 			if err != nil {
-				fmt.Printf("ingestion.dbWriter: dbClient.NewBatchPoints: %v\n", err)
+				log.WithField("error", err).Error("ingestion.dbWriter: dbClient.NewBatchPoints")
+				return
 			}
 
 			for _, marketUpdate := range marketUpdates.Updates {
 
 				pt, err := preparePoint(marketUpdate, currencyPair, marketUpdates.Sequence)
 				if err != nil {
-					fmt.Printf("ingestion.dbWriter: ingestion.preparePoint: %v\n", err)
+					log.WithField("error", err).Error("ingestion.dbWriter: ingestion.preparePoint")
 					continue
 				}
 				bp.AddPoint(pt)
 			}
 
 			if err := dbClient.Write(bp); err != nil {
-				fmt.Printf("ingestion.dbWriter: ingestion.dbClient.Write %v\n", err)
+				log.WithFields(log.Fields{
+					"batchPoints": bp,
+					"error":       err,
+				}).Error("ingestion.dbWriter: ingestion.dbClient.Write")
 			}
 
 		}(marketUpdates)
