@@ -1,0 +1,22 @@
+{
+    "ingestion": {
+        "host": "http://localhost:8086",
+        "schema": {
+            "database": "poloniex",
+            "book_updates_measurement": "book_updates",
+            "trade_updates_measurement": "trade_updates"
+        },
+        "market_check_period_min": 10
+    },
+
+    "public_api": {
+        "public_api_url": "https://poloniex.com/public",
+        "httpclient_timeout_sec": 10,
+        "max_requests_sec": 5
+    },
+
+    "push_api": {
+        "wss_uri": "wss://api.poloniex.com",
+        "realm": "realm1"
+    }
+}

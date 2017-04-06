@@ -1,7 +1,9 @@
 package poloniex
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"poloniex/publicapi"
 	"poloniex/pushapi"
@@ -11,13 +13,8 @@ import (
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
 )
 
-const (
-	DATABASE                  = "poloniex"
-	BOOK_UPDATES_MEASUREMENT  = "book_updates"
-	TRADE_UPDATES_MEASUREMENT = "trade_updates"
-)
-
 var (
+	conf         *configuration
 	publicClient *publicapi.PublicClient
 	pushClient   *pushapi.PushClient
 	dbClient     influxDBClient.Client
@@ -26,13 +23,30 @@ var (
 	marketUpdaters map[string]pushapi.MarketUpdater
 )
 
+type configuration struct {
+	Ingestion struct {
+		Host                 string            `json:"host"`
+		Schema               map[string]string `json:"schema"`
+		MarketCheckPeriodMin int               `json:"market_check_period_min"`
+	} `json:"ingestion"`
+}
+
 func init() {
+
+	content, err := ioutil.ReadFile("conf.json")
+
+	if err != nil {
+		log.Fatalf("loading configuration: %v", err)
+	}
+
+	if err := json.Unmarshal(content, &conf); err != nil {
+		log.Fatalf("loading configuration: %v", err)
+	}
 
 	publicClient = publicapi.NewPublicClient()
 
-	var err error
 	dbClient, err = influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
-		Addr: "http://localhost:8086",
+		Addr: conf.Ingestion.Host,
 		// Username: username,
 		// Password: password,
 	})
@@ -54,7 +68,8 @@ func Ingest() {
 
 	for {
 		updateMarkets()
-		<-time.After(30 * time.Minute)
+		<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin)
+            * time.Minute)
 	}
 }
 
@@ -96,7 +111,7 @@ func dbWriter(marketUpdater pushapi.MarketUpdater, currencyPair string) {
 		go func(marketUpdates *pushapi.MarketUpdates) {
 
 			bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
-				Database:  DATABASE,
+				Database:  conf.Ingestion.Schema["database"],
 				Precision: "ns",
 			})
 			if err != nil {
@@ -145,7 +160,7 @@ func preparePoint(marketUpdate *pushapi.MarketUpdate,
 			"rate":     obm.Rate,
 			"amount":   obm.Amount,
 		}
-		measurement = BOOK_UPDATES_MEASUREMENT
+		measurement = conf.Ingestion.Schema["book_updates_measurement"]
 		timestamp = time.Now()
 
 	case "orderBookRemove":
@@ -161,7 +176,7 @@ func preparePoint(marketUpdate *pushapi.MarketUpdate,
 			"rate":     obr.Rate,
 			"amount":   0.0,
 		}
-		measurement = BOOK_UPDATES_MEASUREMENT
+		measurement = conf.Ingestion.Schema["book_updates_measurement"]
 		timestamp = time.Now()
 
 	case "newTrade":
@@ -177,7 +192,7 @@ func preparePoint(marketUpdate *pushapi.MarketUpdate,
 			"rate":     nt.Rate,
 			"amount":   nt.Amount,
 		}
-		measurement = TRADE_UPDATES_MEASUREMENT
+		measurement = conf.Ingestion.Schema["trade_updates_measurement"]
 
 		nano := time.Now().UnixNano() % int64(time.Second)
 		timestamp = time.Unix(nt.Date, nano)
