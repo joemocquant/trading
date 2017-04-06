@@ -25,6 +25,7 @@ var (
 type configuration struct {
 	Ingestion struct {
 		Host                 string            `json:"host"`
+		Auth                 map[string]string `json:"auth"`
 		Schema               map[string]string `json:"schema"`
 		MarketCheckPeriodMin int               `json:"market_check_period_min"`
 		LogLevel             string            `json:"log_level"`
@@ -63,9 +64,9 @@ func init() {
 	publicClient = publicapi.NewPublicClient()
 
 	dbClient, err = influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
-		Addr: conf.Ingestion.Host,
-		// Username: username,
-		// Password: password,
+		Addr:     conf.Ingestion.Host,
+		Username: conf.Ingestion.Auth["username"],
+		Password: conf.Ingestion.Auth["password"],
 	})
 
 	if err != nil {
@@ -116,6 +117,8 @@ func updateMarkets() {
 				}).Error("ingestion.updateMarkets: pushClient.SubscribeMarket")
 				continue
 			}
+
+			log.Infof("Subscribed to: %s", currencyPair)
 
 			marketUpdaters[currencyPair] = marketUpdater
 			go dbWriter(marketUpdater, currencyPair)
