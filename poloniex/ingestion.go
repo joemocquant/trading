@@ -1,6 +1,8 @@
 package poloniex
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io/ioutil"
 	"poloniex/publicapi"
@@ -26,6 +28,7 @@ type configuration struct {
 	Ingestion struct {
 		Host                 string            `json:"host"`
 		Auth                 map[string]string `json:"auth"`
+		TlsCertificatePath   string            `json:"tls_certificate_path"`
 		Schema               map[string]string `json:"schema"`
 		MarketCheckPeriodMin int               `json:"market_check_period_min"`
 		LogLevel             string            `json:"log_level"`
@@ -63,10 +66,22 @@ func init() {
 
 	publicClient = publicapi.NewPublicClient()
 
+	tlsConfig := &tls.Config{RootCAs: x509.NewCertPool()}
+	certPath := conf.Ingestion.TlsCertificatePath
+
+	if crt, err := ioutil.ReadFile(certPath); err != nil {
+		log.WithField("error", err).Fatal("reading certificate")
+	} else {
+		if ok := tlsConfig.RootCAs.AppendCertsFromPEM(crt); !ok {
+			log.Fatal("cannot append certificate")
+		}
+	}
+
 	dbClient, err = influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
-		Addr:     conf.Ingestion.Host,
-		Username: conf.Ingestion.Auth["username"],
-		Password: conf.Ingestion.Auth["password"],
+		Addr:      conf.Ingestion.Host,
+		Username:  conf.Ingestion.Auth["username"],
+		Password:  conf.Ingestion.Auth["password"],
+		TLSConfig: tlsConfig,
 	})
 
 	if err != nil {
