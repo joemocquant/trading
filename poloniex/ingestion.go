@@ -3,13 +3,13 @@ package poloniex
 import (
 	"encoding/json"
 	"io/ioutil"
-	log "logrus"
 	"poloniex/publicapi"
 	"poloniex/pushapi"
 	"sync"
 	"time"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
