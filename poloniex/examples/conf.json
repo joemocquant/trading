@@ -3,7 +3,7 @@
         "host": "https://localhost:8086",
         "auth": {
             "username": "polo-ingest",
-            "password": ""
+            "password": "polo-ingestpass"
         },
         "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
         "schema": {
