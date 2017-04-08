@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"io/ioutil"
-	"poloniex/publicapi"
-	"poloniex/pushapi"
 	"sync"
 	"time"
+	"trading/poloniex/publicapi"
+	"trading/poloniex/pushapi"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
 	log "github.com/sirupsen/logrus"
