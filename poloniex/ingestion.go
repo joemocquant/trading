@@ -1,11 +1,8 @@
 package poloniex
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"io/ioutil"
-	"sync"
 	"time"
 	"trading/poloniex/publicapi"
 	"trading/poloniex/pushapi"
@@ -15,13 +12,11 @@ import (
 )
 
 var (
-	conf         *configuration
-	publicClient *publicapi.PublicClient
-	pushClient   *pushapi.PushClient
-	dbClient     influxDBClient.Client
-
-	mapMutex       sync.Mutex
+	conf           *configuration
+	publicClient   *publicapi.PublicClient
+	pushClient     *pushapi.PushClient
 	marketUpdaters map[string]pushapi.MarketUpdater
+	pointsToWrite  chan *influxDBClient.Point
 )
 
 type configuration struct {
@@ -31,6 +26,7 @@ type configuration struct {
 		TlsCertificatePath   string            `json:"tls_certificate_path"`
 		Schema               map[string]string `json:"schema"`
 		MarketCheckPeriodMin int               `json:"market_check_period_min"`
+		FlushPointsPeriodMs  int               `json:"flush_points_period_ms"`
 		LogLevel             string            `json:"log_level"`
 	} `json:"ingestion"`
 }
@@ -64,59 +60,50 @@ func init() {
 		log.SetLevel(log.WarnLevel)
 	}
 
+	initDb()
+
 	publicClient = publicapi.NewPublicClient()
 
-	tlsConfig := &tls.Config{RootCAs: x509.NewCertPool()}
-	certPath := conf.Ingestion.TlsCertificatePath
-
-	if crt, err := ioutil.ReadFile(certPath); err != nil {
-		log.WithField("error", err).Fatal("reading certificate")
-	} else {
-		if ok := tlsConfig.RootCAs.AppendCertsFromPEM(crt); !ok {
-			log.Fatal("cannot append certificate")
-		}
-	}
-
-	dbClient, err = influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
-		Addr:      conf.Ingestion.Host,
-		Username:  conf.Ingestion.Auth["username"],
-		Password:  conf.Ingestion.Auth["password"],
-		TLSConfig: tlsConfig,
-	})
-
-	if err != nil {
-		log.WithField("error", err).Fatal("influxDBClient.NewHTTPClient")
-	}
-
 	pushClient, err = pushapi.NewPushClient()
-
 	if err != nil {
 		log.WithField("error", err).Fatal("pushapi.NewPushClient")
 	}
 
 	marketUpdaters = make(map[string]pushapi.MarketUpdater)
+	pointsToWrite = make(chan *influxDBClient.Point, 500)
 }
 
 func Ingest() {
 
-	for {
-		updateMarkets()
-		<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin) *
-			time.Minute)
-	}
+	// Flushing periodiocally
+	go func() {
+		for {
+			<-time.After(time.Duration(conf.Ingestion.FlushPointsPeriodMs) *
+				time.Millisecond)
+			flushPoints(len(pointsToWrite))
+		}
+	}()
+
+	// Checking new markets periodically
+	go func() {
+		for {
+			ingestNewMarkets()
+			<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin) *
+				time.Minute)
+		}
+	}()
+
+	select {}
 }
 
-func updateMarkets() {
+func ingestNewMarkets() {
 
 	tickers, err := publicClient.GetTickers()
 
 	for err != nil {
-		log.WithField("error", err).Error("ingestion.updateMarkets: publicClient.GetTickers")
+		log.WithField("error", err).Error("ingestion.ingestNewMarkets: publicClient.GetTickers")
 		tickers, err = publicClient.GetTickers()
 	}
-
-	mapMutex.Lock()
-	defer mapMutex.Unlock()
 
 	for currencyPair, _ := range tickers {
 
@@ -129,33 +116,24 @@ func updateMarkets() {
 				log.WithFields(log.Fields{
 					"currencyPair": currencyPair,
 					"error":        err,
-				}).Error("ingestion.updateMarkets: pushClient.SubscribeMarket")
+				}).Error("ingestion.ingestNewMarkets: pushClient.SubscribeMarket")
 				continue
 			}
 
 			log.Infof("Subscribed to: %s", currencyPair)
 
 			marketUpdaters[currencyPair] = marketUpdater
-			go dbWriter(marketUpdater, currencyPair)
+			go getNewPoints(marketUpdater, currencyPair)
 		}
 	}
 }
 
-func dbWriter(marketUpdater pushapi.MarketUpdater, currencyPair string) {
+func getNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string) {
 
 	for {
 		marketUpdates := <-marketUpdater
 
 		go func(marketUpdates *pushapi.MarketUpdates) {
-
-			bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
-				Database:  conf.Ingestion.Schema["database"],
-				Precision: "ns",
-			})
-			if err != nil {
-				log.WithField("error", err).Error("ingestion.dbWriter: dbClient.NewBatchPoints")
-				return
-			}
 
 			for _, marketUpdate := range marketUpdates.Updates {
 
@@ -164,85 +142,11 @@ func dbWriter(marketUpdater pushapi.MarketUpdater, currencyPair string) {
 					log.WithField("error", err).Error("ingestion.dbWriter: ingestion.preparePoint")
 					continue
 				}
-				bp.AddPoint(pt)
-			}
 
-			if err := dbClient.Write(bp); err != nil {
-				log.WithFields(log.Fields{
-					"batchPoints": bp,
-					"error":       err,
-				}).Error("ingestion.dbWriter: ingestion.dbClient.Write")
+				pointsToWrite <- pt
 			}
 
 		}(marketUpdates)
 
 	}
-}
-
-func preparePoint(marketUpdate *pushapi.MarketUpdate,
-	currencyPair string, sequence int64) (*influxDBClient.Point, error) {
-
-	tags := make(map[string]string)
-	fields := make(map[string]interface{})
-	var measurement string
-	var timestamp time.Time
-
-	switch marketUpdate.TypeUpdate {
-
-	case "orderBookModify":
-
-		obm := marketUpdate.Data.(pushapi.OrderBookModify)
-
-		tags = map[string]string{
-			"order_type": obm.TypeOrder,
-			"market":     currencyPair,
-		}
-		fields = map[string]interface{}{
-			"sequence": sequence,
-			"rate":     obm.Rate,
-			"amount":   obm.Amount,
-		}
-		measurement = conf.Ingestion.Schema["book_updates_measurement"]
-		timestamp = time.Now()
-
-	case "orderBookRemove":
-
-		obr := marketUpdate.Data.(pushapi.OrderBookRemove)
-
-		tags = map[string]string{
-			"order_type": obr.TypeOrder,
-			"market":     currencyPair,
-		}
-		fields = map[string]interface{}{
-			"sequence": sequence,
-			"rate":     obr.Rate,
-			"amount":   0.0,
-		}
-		measurement = conf.Ingestion.Schema["book_updates_measurement"]
-		timestamp = time.Now()
-
-	case "newTrade":
-
-		nt := marketUpdate.Data.(pushapi.NewTrade)
-
-		tags = map[string]string{
-			"order_type": nt.TypeOrder,
-			"market":     currencyPair,
-		}
-		fields = map[string]interface{}{
-			"sequence": sequence,
-			"rate":     nt.Rate,
-			"amount":   nt.Amount,
-		}
-		measurement = conf.Ingestion.Schema["trade_updates_measurement"]
-
-		nano := time.Now().UnixNano() % int64(time.Second)
-		timestamp = time.Unix(nt.Date, nano)
-	}
-
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
-	if err != nil {
-		return nil, err
-	}
-	return pt, nil
 }

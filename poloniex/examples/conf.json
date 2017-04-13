@@ -12,6 +12,7 @@
             "trade_updates_measurement": "trade_updates"
         },
         "market_check_period_min": 10,
+        "flush_points_period_ms": 250,
         "log_level": "debug"
     },
 

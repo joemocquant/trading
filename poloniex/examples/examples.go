@@ -1,7 +1,10 @@
 package main
 
-import "trading/ingestion/poloniex"
+import (
+	"trading/ingestion/poloniex"
+)
 
 func main() {
+
 	poloniex.Ingest()
 }
