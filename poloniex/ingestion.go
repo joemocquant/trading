@@ -33,6 +33,11 @@ type configuration struct {
 
 func init() {
 
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	log.SetFormatter(customFormatter)
+	customFormatter.FullTimestamp = true
+
 	content, err := ioutil.ReadFile("conf.json")
 
 	if err != nil {
@@ -80,7 +85,9 @@ func Ingest() {
 		for {
 			<-time.After(time.Duration(conf.Ingestion.FlushPointsPeriodMs) *
 				time.Millisecond)
-			flushPoints(len(pointsToWrite))
+			if len(pointsToWrite) != 0 {
+				flushPoints(len(pointsToWrite))
+			}
 		}
 	}()
 
@@ -102,6 +109,7 @@ func ingestNewMarkets() {
 
 	for err != nil {
 		log.WithField("error", err).Error("ingestion.ingestNewMarkets: publicClient.GetTickers")
+		time.Sleep(5 * time.Second)
 		tickers, err = publicClient.GetTickers()
 	}
 
