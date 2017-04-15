@@ -12,15 +12,15 @@
             "trade_updates_measurement": "trade_updates",
             "book_orders_measurement": "book_orders"
         },
-        "order_books_check_period_sec": 30,
-        "market_check_period_min": 5,
+        "order_books_check_period_min": 2,
+        "market_check_period_min": 10,
         "flush_points_period_ms": 250,
         "log_level": "debug"
     },
 
     "public_api": {
         "public_api_url": "https://poloniex.com/public",
-        "httpclient_timeout_sec": 10,
+        "httpclient_timeout_sec": 20,
         "max_requests_sec": 5,
         "log_level": "debug"
     },

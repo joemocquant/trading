@@ -26,7 +26,7 @@ type configuration struct {
 		Auth                     map[string]string `json:"auth"`
 		TlsCertificatePath       string            `json:"tls_certificate_path"`
 		Schema                   map[string]string `json:"schema"`
-		OrderBooksCheckPeriodSec int               `json:"order_books_check_period_sec"`
+		OrderBooksCheckPeriodMin int               `json:"order_books_check_period_min"`
 		MarketCheckPeriodMin     int               `json:"market_check_period_min"`
 		FlushPointsPeriodMs      int               `json:"flush_points_period_ms"`
 		LogLevel                 string            `json:"log_level"`
@@ -36,9 +36,8 @@ type configuration struct {
 func init() {
 
 	customFormatter := new(log.TextFormatter)
-	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
-	log.SetFormatter(customFormatter)
 	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
 
 	content, err := ioutil.ReadFile("conf.json")
 
@@ -84,10 +83,9 @@ func Ingest() {
 
 	// Init and checking order books periodically
 	go func() {
-
 		for {
 			ingestOrderBooks()
-			<-time.After(time.Duration(conf.Ingestion.OrderBooksCheckPeriodSec) *
+			<-time.After(time.Duration(conf.Ingestion.OrderBooksCheckPeriodMin) *
 				time.Second)
 		}
 	}()
