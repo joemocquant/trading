@@ -48,6 +48,8 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 
 		go func(marketUpdates *pushapi.MarketUpdates) {
 
+			points := make([]*influxDBClient.Point, 0, len(marketUpdates.Updates))
+
 			for _, marketUpdate := range marketUpdates.Updates {
 
 				pt, err := prepareMarketPoint(marketUpdate, currencyPair, marketUpdates.Sequence)
@@ -56,8 +58,9 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 					continue
 				}
 
-				pointsToWrite <- pt
+				points = append(points, pt)
 			}
+			pointsToWrite <- &batchPoints{"markets", points}
 
 		}(marketUpdates)
 
@@ -130,27 +133,4 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		return nil, err
 	}
 	return pt, nil
-}
-
-func flushMarketPoints(number int) {
-
-	bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
-		Database:  conf.Ingestion.Schema["database"],
-		Precision: "ns",
-	})
-	if err != nil {
-		log.WithField("error", err).Error("ingestion.flushMarketPoints: dbClient.NewBatchPoints")
-		return
-	}
-
-	for i := 0; i < number; i++ {
-		bp.AddPoint(<-pointsToWrite)
-	}
-
-	if err := dbClient.Write(bp); err != nil {
-		log.WithFields(log.Fields{
-			"batchPoints": bp,
-			"error":       err,
-		}).Error("ingestion.flushMarketPoints: ingestion.dbClient.Write")
-	}
 }

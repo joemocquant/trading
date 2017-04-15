@@ -18,23 +18,21 @@ func ingestOrderBooks() {
 		orderBooks, err = publicClient.GetOrderBooks(100000)
 	}
 
-	writeOrderBooks(orderBooks)
+	prepareOrderBooksPoints(&orderBooks)
 }
 
-func writeOrderBooks(orderBooks publicapi.OrderBooks) {
-
-	bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
-		Database:  conf.Ingestion.Schema["database"],
-		Precision: "ns",
-	})
-	if err != nil {
-		log.WithField("error", err).Error("ingestion.writeOrderBooks: dbClient.NewBatchPoints")
-		return
-	}
+func prepareOrderBooksPoints(orderBooks *publicapi.OrderBooks) {
 
 	measurement := conf.Ingestion.Schema["book_orders_measurement"]
 	baseTimestamp := time.Now().Unix()
 	index := 0
+
+	size := 0
+	for _, orderBook := range *orderBooks {
+		size += len(orderBook.Asks) + len(orderBook.Bids)
+	}
+
+	points := make([]*influxDBClient.Point, 0, size)
 
 	loop := func(currencyPair, typeOrder string, orders []publicapi.Order, sequence int64) {
 
@@ -59,20 +57,14 @@ func writeOrderBooks(orderBooks publicapi.OrderBooks) {
 				log.WithField("error", err).Error("ingestion.writeOrderBooks: influxDBClient.NewPoint")
 				continue
 			}
-			bp.AddPoint(pt)
+			points = append(points, pt)
 		}
 	}
 
-	for currencyPair, orderBook := range orderBooks {
-
+	for currencyPair, orderBook := range *orderBooks {
 		loop(currencyPair, "ask", orderBook.Asks, orderBook.Seq)
 		loop(currencyPair, "bid", orderBook.Bids, orderBook.Seq)
 	}
 
-	if err := dbClient.Write(bp); err != nil {
-		log.WithFields(log.Fields{
-			"batchPoints": bp,
-			"error":       err,
-		}).Error("ingestion.writeOrderBooks: ingestion.dbClient.Write")
-	}
+	pointsToWrite <- &batchPoints{"orderBooks", points}
 }

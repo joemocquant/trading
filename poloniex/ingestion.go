@@ -17,7 +17,7 @@ var (
 	publicClient   *publicapi.PublicClient
 	pushClient     *pushapi.PushClient
 	marketUpdaters map[string]pushapi.MarketUpdater
-	pointsToWrite  chan *influxDBClient.Point
+	pointsToWrite  chan *batchPoints
 )
 
 type configuration struct {
@@ -31,6 +31,11 @@ type configuration struct {
 		FlushPointsPeriodMs      int               `json:"flush_points_period_ms"`
 		LogLevel                 string            `json:"log_level"`
 	} `json:"ingestion"`
+}
+
+type batchPoints struct {
+	typePoint string
+	points    []*influxDBClient.Point
 }
 
 func init() {
@@ -76,39 +81,87 @@ func init() {
 	}
 
 	marketUpdaters = make(map[string]pushapi.MarketUpdater)
-	pointsToWrite = make(chan *influxDBClient.Point, 500)
+	pointsToWrite = make(chan *batchPoints, 5000)
 }
 
 func Ingest() {
+
+	// flushing points periodically
+	go func() {
+		for {
+			<-time.After(time.Duration(conf.Ingestion.FlushPointsPeriodMs) * time.Millisecond)
+			if len(pointsToWrite) != 0 {
+				flushPoints(len(pointsToWrite))
+			}
+		}
+	}()
+
+	//-- Ticks
+
+	// Ingest tickers
+	go ingestTicks()
+
+	//-- OrderBooks
 
 	// Init and checking order books periodically
 	go func() {
 		for {
 			ingestOrderBooks()
-			<-time.After(time.Duration(conf.Ingestion.OrderBooksCheckPeriodMin) *
-				time.Second)
+			<-time.After(time.Duration(conf.Ingestion.OrderBooksCheckPeriodMin) * time.Minute)
 		}
 	}()
 
-	// Flushing market points periodiocally
-	go func() {
-		for {
-			<-time.After(time.Duration(conf.Ingestion.FlushPointsPeriodMs) *
-				time.Millisecond)
-			if len(pointsToWrite) != 0 {
-				flushMarketPoints(len(pointsToWrite))
-			}
-		}
-	}()
+	//-- Market
 
-	// Checking new markets periodically
+	// Ingest and checking new markets periodically
 	go func() {
 		for {
 			ingestNewMarkets()
-			<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin) *
-				time.Minute)
+			<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin) * time.Minute)
 		}
 	}()
 
 	select {}
+}
+
+func flushPoints(batchCount int) {
+
+	bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
+		Database:  conf.Ingestion.Schema["database"],
+		Precision: "ns",
+	})
+	if err != nil {
+		log.WithField("error", err).Error("ingestion.flushPoints: dbClient.NewBatchPoints")
+		return
+	}
+
+	var orderBooksCount, marketsCount, ticksCount = 0, 0, 0
+
+	for i := 0; i < batchCount; i++ {
+
+		batchPoints := <-pointsToWrite
+
+		switch batchPoints.typePoint {
+		case "orderBooks":
+			orderBooksCount += len(batchPoints.points)
+		case "markets":
+			marketsCount += len(batchPoints.points)
+		case "ticks":
+			ticksCount += len(batchPoints.points)
+		}
+
+		for _, pt := range batchPoints.points {
+			bp.AddPoint(pt)
+		}
+	}
+
+	log.Debugf("flushed: %d batchs (%d orderBooks - %d markets - %d ticks)",
+		batchCount, orderBooksCount, marketsCount, ticksCount)
+
+	if err := dbClient.Write(bp); err != nil {
+		log.WithFields(log.Fields{
+			"batchPoints": bp,
+			"error":       err,
+		}).Error("ingestion.flushPoints: ingestion.dbClient.Write")
+	}
 }
