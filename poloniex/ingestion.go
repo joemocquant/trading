@@ -13,6 +13,7 @@ import (
 
 var (
 	conf           *configuration
+	dbClient       influxDBClient.Client
 	publicClient   *publicapi.PublicClient
 	pushClient     *pushapi.PushClient
 	marketUpdaters map[string]pushapi.MarketUpdater
@@ -21,13 +22,14 @@ var (
 
 type configuration struct {
 	Ingestion struct {
-		Host                 string            `json:"host"`
-		Auth                 map[string]string `json:"auth"`
-		TlsCertificatePath   string            `json:"tls_certificate_path"`
-		Schema               map[string]string `json:"schema"`
-		MarketCheckPeriodMin int               `json:"market_check_period_min"`
-		FlushPointsPeriodMs  int               `json:"flush_points_period_ms"`
-		LogLevel             string            `json:"log_level"`
+		Host                     string            `json:"host"`
+		Auth                     map[string]string `json:"auth"`
+		TlsCertificatePath       string            `json:"tls_certificate_path"`
+		Schema                   map[string]string `json:"schema"`
+		OrderBooksCheckPeriodSec int               `json:"order_books_check_period_sec"`
+		MarketCheckPeriodMin     int               `json:"market_check_period_min"`
+		FlushPointsPeriodMs      int               `json:"flush_points_period_ms"`
+		LogLevel                 string            `json:"log_level"`
 	} `json:"ingestion"`
 }
 
@@ -80,13 +82,23 @@ func init() {
 
 func Ingest() {
 
-	// Flushing periodiocally
+	// Init and checking order books periodically
+	go func() {
+
+		for {
+			ingestOrderBooks()
+			<-time.After(time.Duration(conf.Ingestion.OrderBooksCheckPeriodSec) *
+				time.Second)
+		}
+	}()
+
+	// Flushing market points periodiocally
 	go func() {
 		for {
 			<-time.After(time.Duration(conf.Ingestion.FlushPointsPeriodMs) *
 				time.Millisecond)
 			if len(pointsToWrite) != 0 {
-				flushPoints(len(pointsToWrite))
+				flushMarketPoints(len(pointsToWrite))
 			}
 		}
 	}()
@@ -101,60 +113,4 @@ func Ingest() {
 	}()
 
 	select {}
-}
-
-func ingestNewMarkets() {
-
-	tickers, err := publicClient.GetTickers()
-
-	for err != nil {
-		log.WithField("error", err).Error("ingestion.ingestNewMarkets: publicClient.GetTickers")
-		time.Sleep(5 * time.Second)
-		tickers, err = publicClient.GetTickers()
-	}
-
-	for currencyPair, _ := range tickers {
-
-		if _, ok := marketUpdaters[currencyPair]; !ok {
-
-			marketUpdater, err := pushClient.SubscribeMarket(currencyPair)
-
-			if err != nil {
-
-				log.WithFields(log.Fields{
-					"currencyPair": currencyPair,
-					"error":        err,
-				}).Error("ingestion.ingestNewMarkets: pushClient.SubscribeMarket")
-				continue
-			}
-
-			log.Infof("Subscribed to: %s", currencyPair)
-
-			marketUpdaters[currencyPair] = marketUpdater
-			go getNewPoints(marketUpdater, currencyPair)
-		}
-	}
-}
-
-func getNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string) {
-
-	for {
-		marketUpdates := <-marketUpdater
-
-		go func(marketUpdates *pushapi.MarketUpdates) {
-
-			for _, marketUpdate := range marketUpdates.Updates {
-
-				pt, err := preparePoint(marketUpdate, currencyPair, marketUpdates.Sequence)
-				if err != nil {
-					log.WithField("error", err).Error("ingestion.dbWriter: ingestion.preparePoint")
-					continue
-				}
-
-				pointsToWrite <- pt
-			}
-
-		}(marketUpdates)
-
-	}
 }
