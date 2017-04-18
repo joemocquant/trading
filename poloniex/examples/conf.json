@@ -11,11 +11,12 @@
             "book_updates_measurement": "book_updates",
             "trade_updates_measurement": "trade_updates",
             "book_orders_measurement": "book_orders",
+            "book_orders_last_check_measurement": "book_orders_last_check",
             "ticks_measurement": "ticks"
         },
-        "order_books_check_period_min": 2,
+        "order_books_check_period_sec": 30,
         "market_check_period_min": 10,
-        "flush_points_period_ms": 250,
+        "flush_points_period_ms": 500,
         "log_level": "debug"
     },
 

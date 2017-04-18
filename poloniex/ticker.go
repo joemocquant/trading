@@ -52,7 +52,6 @@ func prepareTickPoint(tick *pushapi.Tick) (*influxDBClient.Point, error) {
 	}
 
 	fields := map[string]interface{}{
-		"market":         tick.CurrencyPair,
 		"last":           tick.Last,
 		"lowest_ask":     tick.LowestAsk,
 		"highest_bid":    tick.HighestBid,

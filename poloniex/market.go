@@ -18,6 +18,8 @@ func ingestNewMarkets() {
 		tickers, err = publicClient.GetTickers()
 	}
 
+	// Might need to filter out frozen markets
+
 	for currencyPair, _ := range tickers {
 
 		if _, ok := marketUpdaters[currencyPair]; !ok {
@@ -79,7 +81,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 
 	case "orderBookModify":
 
-		obm := marketUpdate.Data.(pushapi.OrderBookModify)
+		obm := marketUpdate.Data.(*pushapi.OrderBookModify)
 
 		tags = map[string]string{
 			"order_type": obm.TypeOrder,
@@ -95,7 +97,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 
 	case "orderBookRemove":
 
-		obr := marketUpdate.Data.(pushapi.OrderBookRemove)
+		obr := marketUpdate.Data.(*pushapi.OrderBookRemove)
 
 		tags = map[string]string{
 			"order_type": obr.TypeOrder,
@@ -111,7 +113,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 
 	case "newTrade":
 
-		nt := marketUpdate.Data.(pushapi.NewTrade)
+		nt := marketUpdate.Data.(*pushapi.NewTrade)
 
 		tags = map[string]string{
 			"order_type": nt.TypeOrder,

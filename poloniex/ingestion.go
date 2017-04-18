@@ -26,7 +26,7 @@ type configuration struct {
 		Auth                     map[string]string `json:"auth"`
 		TlsCertificatePath       string            `json:"tls_certificate_path"`
 		Schema                   map[string]string `json:"schema"`
-		OrderBooksCheckPeriodMin int               `json:"order_books_check_period_min"`
+		OrderBooksCheckPeriodSec int               `json:"order_books_check_period_sec"`
 		MarketCheckPeriodMin     int               `json:"market_check_period_min"`
 		FlushPointsPeriodMs      int               `json:"flush_points_period_ms"`
 		LogLevel                 string            `json:"log_level"`
@@ -104,12 +104,7 @@ func Ingest() {
 	//-- OrderBooks
 
 	// Init and checking order books periodically
-	go func() {
-		for {
-			ingestOrderBooks()
-			<-time.After(time.Duration(conf.Ingestion.OrderBooksCheckPeriodMin) * time.Minute)
-		}
-	}()
+	go ingestOrderBooks(100000, time.Duration(conf.Ingestion.OrderBooksCheckPeriodSec)*time.Second)
 
 	//-- Market
 
@@ -135,28 +130,17 @@ func flushPoints(batchCount int) {
 		return
 	}
 
-	var orderBooksCount, marketsCount, ticksCount = 0, 0, 0
+	batchPointsArr := []*batchPoints{}
 
 	for i := 0; i < batchCount; i++ {
+		batchPointsArr = append(batchPointsArr, <-pointsToWrite)
+	}
 
-		batchPoints := <-pointsToWrite
-
-		switch batchPoints.typePoint {
-		case "orderBooks":
-			orderBooksCount += len(batchPoints.points)
-		case "markets":
-			marketsCount += len(batchPoints.points)
-		case "ticks":
-			ticksCount += len(batchPoints.points)
-		}
-
+	for _, batchPoints := range batchPointsArr {
 		for _, pt := range batchPoints.points {
 			bp.AddPoint(pt)
 		}
 	}
-
-	log.Debugf("flushed: %d batchs (%d orderBooks - %d markets - %d ticks)",
-		batchCount, orderBooksCount, marketsCount, ticksCount)
 
 	if err := dbClient.Write(bp); err != nil {
 		log.WithFields(log.Fields{
@@ -164,4 +148,46 @@ func flushPoints(batchCount int) {
 			"error":       err,
 		}).Error("ingestion.flushPoints: ingestion.dbClient.Write")
 	}
+
+	if log.GetLevel() >= log.DebugLevel {
+		flushDebug(batchPointsArr)
+	}
+}
+
+func flushDebug(batchPointsArr []*batchPoints) {
+
+	orderBookBatchCount, orderBookLastCheckBatchCount, marketBatchCount, tickBatchCount := 0, 0, 0, 0
+	orderBookPointCount, orderBookLastCheckPointCount, marketPointCount, tickPointCount := 0, 0, 0, 0
+
+	for _, batchPoints := range batchPointsArr {
+		switch batchPoints.typePoint {
+
+		case "orderBook":
+			orderBookBatchCount++
+			orderBookPointCount += len(batchPoints.points)
+
+		case "orderBookLastCheck":
+			orderBookLastCheckBatchCount++
+			orderBookLastCheckPointCount += len(batchPoints.points)
+		case "markets":
+			marketBatchCount++
+			marketPointCount += len(batchPoints.points)
+
+		case "ticks":
+			tickBatchCount++
+			tickPointCount += len(batchPoints.points)
+		}
+	}
+
+	log.Debugf("Flushed: %d batchs (%d points)\n"+
+		"\t%d orderBook batchs (%d points)\n"+
+		"\t%d orderBookLastCheck batchs (%d points)\n"+
+		"\t%d market batchs (%d points)\n"+
+		"\t%d tick batchs (%d points))",
+		orderBookBatchCount+orderBookLastCheckBatchCount+marketBatchCount+tickBatchCount,
+		orderBookPointCount+orderBookLastCheckPointCount+marketPointCount+tickPointCount,
+		orderBookBatchCount, orderBookPointCount,
+		orderBookLastCheckBatchCount, orderBookLastCheckPointCount,
+		marketBatchCount, marketPointCount,
+		tickBatchCount, tickPointCount)
 }
