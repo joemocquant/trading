@@ -20,26 +20,32 @@ func ingestNewMarkets() {
 
 	// Might need to filter out frozen markets
 
+	newMarkets := make([]string, 0)
 	for currencyPair, _ := range tickers {
-
 		if _, ok := marketUpdaters[currencyPair]; !ok {
-
-			marketUpdater, err := pushClient.SubscribeMarket(currencyPair)
-
-			if err != nil {
-
-				log.WithFields(log.Fields{
-					"currencyPair": currencyPair,
-					"error":        err,
-				}).Error("ingestion.ingestNewMarkets: pushClient.SubscribeMarket")
-				continue
-			}
-
-			log.Infof("Subscribed to: %s", currencyPair)
-
-			marketUpdaters[currencyPair] = marketUpdater
-			go getMarketNewPoints(marketUpdater, currencyPair)
+			newMarkets = append(newMarkets, currencyPair)
 		}
+	}
+
+	if len(newMarkets) > 0 {
+		log.WithField("newMarkets", newMarkets).Infof("Ingesting %d new markets", len(newMarkets))
+	}
+
+	for _, currencyPair := range newMarkets {
+
+		marketUpdater, err := pushClient.SubscribeMarket(currencyPair)
+
+		if err != nil {
+
+			log.WithFields(log.Fields{
+				"currencyPair": currencyPair,
+				"error":        err,
+			}).Error("ingestion.ingestNewMarkets: pushClient.SubscribeMarket")
+			continue
+		}
+
+		marketUpdaters[currencyPair] = marketUpdater
+		go getMarketNewPoints(marketUpdater, currencyPair)
 	}
 }
 
@@ -84,6 +90,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		obm := marketUpdate.Data.(*pushapi.OrderBookModify)
 
 		tags = map[string]string{
+			"source":     "pushapi",
 			"order_type": obm.TypeOrder,
 			"market":     currencyPair,
 		}
@@ -100,6 +107,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		obr := marketUpdate.Data.(*pushapi.OrderBookRemove)
 
 		tags = map[string]string{
+			"source":     "pushapi",
 			"order_type": obr.TypeOrder,
 			"market":     currencyPair,
 		}
@@ -116,6 +124,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		nt := marketUpdate.Data.(*pushapi.NewTrade)
 
 		tags = map[string]string{
+			"source":     "pushapi",
 			"order_type": nt.TypeOrder,
 			"market":     currencyPair,
 		}

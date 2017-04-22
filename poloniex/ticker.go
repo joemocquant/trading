@@ -18,8 +18,6 @@ func ingestTicks() {
 		ticker, err = pushClient.SubscribeTicker()
 	}
 
-	log.Infof("Subscribed to ticker")
-
 	go getNewTicks(ticker)
 }
 
@@ -48,6 +46,7 @@ func prepareTickPoint(tick *pushapi.Tick) (*influxDBClient.Point, error) {
 	timestamp := time.Now()
 
 	tags := map[string]string{
+		"source": "pushapi",
 		"market": tick.CurrencyPair,
 	}
 

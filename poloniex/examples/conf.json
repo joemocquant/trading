@@ -15,7 +15,7 @@
             "ticks_measurement": "ticks"
         },
         "order_books_check_period_sec": 30,
-        "market_check_period_min": 10,
+        "market_check_period_min": 1,
         "flush_points_period_ms": 500,
         "log_level": "debug"
     },
@@ -30,6 +30,7 @@
     "push_api": {
         "wss_uri": "wss://api.poloniex.com",
         "realm": "realm1",
-        "log_level": "debug"
+        "log_level": "debug",
+        "timeout_sec": 30
     }
 }

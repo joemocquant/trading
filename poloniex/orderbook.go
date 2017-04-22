@@ -43,6 +43,7 @@ func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook,
 			for _, order := range orders {
 
 				tags := map[string]string{
+					"source":     "publicapi",
 					"order_type": typeOrder,
 					"market":     currencyPair,
 				}
@@ -76,6 +77,7 @@ func prepareLastOrderBookCheckPoint(currencyPair string, sequence int64, depth i
 	timestamp := time.Now()
 
 	tags := map[string]string{
+		"source": "publicapi",
 		"market": currencyPair,
 	}
 
