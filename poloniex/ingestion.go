@@ -22,14 +22,15 @@ var (
 
 type configuration struct {
 	Ingestion struct {
-		Host                     string            `json:"host"`
-		Auth                     map[string]string `json:"auth"`
-		TlsCertificatePath       string            `json:"tls_certificate_path"`
-		Schema                   map[string]string `json:"schema"`
-		OrderBooksCheckPeriodSec int               `json:"order_books_check_period_sec"`
-		MarketCheckPeriodMin     int               `json:"market_check_period_min"`
-		FlushPointsPeriodMs      int               `json:"flush_points_period_ms"`
-		LogLevel                 string            `json:"log_level"`
+		Host                      string            `json:"host"`
+		Auth                      map[string]string `json:"auth"`
+		TlsCertificatePath        string            `json:"tls_certificate_path"`
+		Schema                    map[string]string `json:"schema"`
+		PublicTicksCheckPeriodSec int               `json:"public_ticks_check_period_sec"`
+		OrderBooksCheckPeriodSec  int               `json:"order_books_check_period_sec"`
+		MarketCheckPeriodMin      int               `json:"market_check_period_min"`
+		FlushPointsPeriodMs       int               `json:"flush_points_period_ms"`
+		LogLevel                  string            `json:"log_level"`
 	} `json:"ingestion"`
 }
 
