@@ -15,7 +15,7 @@ func ingestTicks() {
 
 	for {
 		go ingestPublicTicks()
-		<-time.After(time.Duration(conf.Ingestion.PublicTicksCheckPeriodSec) * time.Second)
+		<-time.After(time.Duration(conf.PublicTicksCheckPeriodSec) * time.Second)
 	}
 }
 
@@ -44,7 +44,7 @@ func ingestPublicTicks() {
 
 func preparePublicTickPoint(currencyPair string, tick *publicapi.Tick) (*influxDBClient.Point, error) {
 
-	measurement := conf.Ingestion.Schema["ticks_measurement"]
+	measurement := conf.Schema["ticks_measurement"]
 	timestamp := time.Now()
 
 	tags := map[string]string{
@@ -100,7 +100,7 @@ func ingestPushTicks() {
 
 func preparePushTickPoint(tick *pushapi.Tick) (*influxDBClient.Point, error) {
 
-	measurement := conf.Ingestion.Schema["ticks_measurement"]
+	measurement := conf.Schema["ticks_measurement"]
 	timestamp := time.Now()
 
 	tags := map[string]string{

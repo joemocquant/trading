@@ -99,7 +99,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 			"rate":     obm.Rate,
 			"amount":   obm.Amount,
 		}
-		measurement = conf.Ingestion.Schema["book_updates_measurement"]
+		measurement = conf.Schema["book_updates_measurement"]
 		timestamp = time.Now()
 
 	case "orderBookRemove":
@@ -116,7 +116,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 			"rate":     obr.Rate,
 			"amount":   0.0,
 		}
-		measurement = conf.Ingestion.Schema["book_updates_measurement"]
+		measurement = conf.Schema["book_updates_measurement"]
 		timestamp = time.Now()
 
 	case "newTrade":
@@ -133,7 +133,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 			"rate":     nt.Rate,
 			"amount":   nt.Amount,
 		}
-		measurement = conf.Ingestion.Schema["trade_updates_measurement"]
+		measurement = conf.Schema["trade_updates_measurement"]
 
 		nano := time.Now().UnixNano() % int64(time.Second)
 		timestamp = time.Unix(nt.Date, nano)

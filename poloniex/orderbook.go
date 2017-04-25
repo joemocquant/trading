@@ -30,7 +30,7 @@ func ingestOrderBooks(depth int, period time.Duration) {
 
 func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook, depth int) {
 
-	measurement := conf.Ingestion.Schema["book_orders_measurement"]
+	measurement := conf.Schema["book_orders_measurement"]
 	baseTimestamp := time.Now().Unix()
 	index := 0
 
@@ -73,7 +73,7 @@ func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook,
 
 func prepareLastOrderBookCheckPoint(currencyPair string, sequence int64, depth int) {
 
-	measurement := conf.Ingestion.Schema["book_orders_last_check_measurement"]
+	measurement := conf.Schema["book_orders_last_check_measurement"]
 	timestamp := time.Now()
 
 	tags := map[string]string{

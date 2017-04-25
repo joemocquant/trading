@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"time"
+	"trading/ingestion"
 	"trading/poloniex/publicapi"
 	"trading/poloniex/pushapi"
 
@@ -21,17 +22,20 @@ var (
 )
 
 type configuration struct {
-	Ingestion struct {
-		Host                      string            `json:"host"`
-		Auth                      map[string]string `json:"auth"`
-		TlsCertificatePath        string            `json:"tls_certificate_path"`
-		Schema                    map[string]string `json:"schema"`
-		PublicTicksCheckPeriodSec int               `json:"public_ticks_check_period_sec"`
-		OrderBooksCheckPeriodSec  int               `json:"order_books_check_period_sec"`
-		MarketCheckPeriodMin      int               `json:"market_check_period_min"`
-		FlushPointsPeriodMs       int               `json:"flush_points_period_ms"`
-		LogLevel                  string            `json:"log_level"`
-	} `json:"ingestion"`
+	ingestionConf `json:"ingestion"`
+}
+
+type ingestionConf struct {
+	poloniexConf `json:"poloniex"`
+}
+
+type poloniexConf struct {
+	Schema                    map[string]string `json:"schema"`
+	PublicTicksCheckPeriodSec int               `json:"public_ticks_check_period_sec"`
+	OrderBooksCheckPeriodSec  int               `json:"order_books_check_period_sec"`
+	MarketCheckPeriodMin      int               `json:"market_check_period_min"`
+	FlushPointsPeriodMs       int               `json:"flush_points_period_ms"`
+	LogLevel                  string            `json:"log_level"`
 }
 
 type batchPoints struct {
@@ -55,7 +59,7 @@ func init() {
 		log.WithField("error", err).Fatal("loading configuration")
 	}
 
-	switch conf.Ingestion.LogLevel {
+	switch conf.LogLevel {
 	case "debug":
 		log.SetLevel(log.DebugLevel)
 	case "info":
@@ -72,7 +76,7 @@ func init() {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	initDb()
+	dbClient = ingestion.NewdbClient()
 
 	publicClient = publicapi.NewPublicClient()
 
@@ -90,7 +94,7 @@ func Ingest() {
 	// flushing points periodically
 	go func() {
 		for {
-			<-time.After(time.Duration(conf.Ingestion.FlushPointsPeriodMs) * time.Millisecond)
+			<-time.After(time.Duration(conf.FlushPointsPeriodMs) * time.Millisecond)
 			if len(pointsToWrite) != 0 {
 				flushPoints(len(pointsToWrite))
 			}
@@ -105,7 +109,7 @@ func Ingest() {
 	//-- OrderBooks
 
 	// Init and checking order books periodically
-	go ingestOrderBooks(100000, time.Duration(conf.Ingestion.OrderBooksCheckPeriodSec)*time.Second)
+	go ingestOrderBooks(100000, time.Duration(conf.OrderBooksCheckPeriodSec)*time.Second)
 
 	//-- Market
 
@@ -113,7 +117,7 @@ func Ingest() {
 	go func() {
 		for {
 			ingestNewMarkets()
-			<-time.After(time.Duration(conf.Ingestion.MarketCheckPeriodMin) * time.Minute)
+			<-time.After(time.Duration(conf.MarketCheckPeriodMin) * time.Minute)
 		}
 	}()
 
@@ -123,7 +127,7 @@ func Ingest() {
 func flushPoints(batchCount int) {
 
 	bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
-		Database:  conf.Ingestion.Schema["database"],
+		Database:  conf.Schema["database"],
 		Precision: "ns",
 	})
 	if err != nil {

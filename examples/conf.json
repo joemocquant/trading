@@ -1,0 +1,44 @@
+{
+    "ingestion": {
+
+        "influxdb": {
+            "host": "https://localhost:8086",
+            "auth": {
+                "username": "polo-ingest",
+                "password": "polo-ingestpass"
+            },
+            "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
+            "log_level": "debug"
+        },
+
+        "poloniex": {
+            "schema": {
+                "database": "poloniex",
+                "book_updates_measurement": "book_updates",
+                "trade_updates_measurement": "trade_updates",
+                "book_orders_measurement": "book_orders",
+                "book_orders_last_check_measurement": "book_orders_last_check",
+                "ticks_measurement": "ticks"
+            },
+            "public_ticks_check_period_sec": 30,
+            "order_books_check_period_sec": 30,
+            "market_check_period_min": 1,
+            "flush_points_period_ms": 500,
+            "log_level": "debug"
+        },
+    },
+
+    "poloniex_public_api": {
+        "public_api_url": "https://poloniex.com/public",
+        "httpclient_timeout_sec": 20,
+        "max_requests_sec": 5,
+        "log_level": "debug"
+    },
+
+    "poloniex_push_api": {
+        "wss_uri": "wss://api.poloniex.com",
+        "realm": "realm1",
+        "log_level": "debug",
+        "timeout_sec": 30
+    }
+}
