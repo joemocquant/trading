@@ -2,7 +2,7 @@ package poloniex
 
 import (
 	"time"
-	"trading/poloniex/publicapi"
+	"trading/api/poloniex/publicapi"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
 )

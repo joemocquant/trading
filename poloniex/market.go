@@ -2,7 +2,7 @@ package poloniex
 
 import (
 	"time"
-	"trading/poloniex/pushapi"
+	"trading/api/poloniex/pushapi"
 
 	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"

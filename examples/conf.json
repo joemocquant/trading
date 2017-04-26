@@ -40,7 +40,7 @@
     },
 
     "poloniex_public_api": {
-        "public_api_url": "https://poloniex.com/public",
+        "api_url": "https://poloniex.com/public",
         "httpclient_timeout_sec": 20,
         "max_requests_sec": 5,
         "log_level": "debug"

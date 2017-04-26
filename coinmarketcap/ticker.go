@@ -2,7 +2,7 @@ package coinmarketcap
 
 import (
 	"time"
-	"trading/coinmarketcap"
+	"trading/api/coinmarketcap"
 
 	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"time"
+	"trading/api/poloniex/publicapi"
+	"trading/api/poloniex/pushapi"
 	"trading/ingestion"
-	"trading/poloniex/publicapi"
-	"trading/poloniex/pushapi"
 
 	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"

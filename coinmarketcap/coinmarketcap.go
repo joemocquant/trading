@@ -3,7 +3,7 @@ package coinmarketcap
 import (
 	"encoding/json"
 	"io/ioutil"
-	"trading/coinmarketcap"
+	"trading/api/coinmarketcap"
 	"trading/ingestion"
 
 	"github.com/Sirupsen/logrus"
