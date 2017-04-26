@@ -4,8 +4,8 @@
         "influxdb": {
             "host": "https://localhost:8086",
             "auth": {
-                "username": "polo-ingest",
-                "password": "polo-ingestpass"
+                "username": "ingest",
+                "password": "ingestpass"
             },
             "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
             "log_level": "debug"
@@ -26,6 +26,17 @@
             "flush_points_period_ms": 500,
             "log_level": "debug"
         },
+
+        "coinmarketcap": {
+            "schema": {
+                "database": "coinmarketcap",
+                "ticks_measurement": "ticks",
+                "global_data_measurement": "global_data"
+            },
+            "ticks_check_period_min": 5,
+            "global_data_check_period_min": 5,
+            "log_level": "debug"
+        }
     },
 
     "poloniex_public_api": {
@@ -40,5 +51,12 @@
         "realm": "realm1",
         "log_level": "debug",
         "timeout_sec": 30
+    },
+
+    "coinmarketcap": {
+        "api_url":  "https://api.coinmarketcap.com/v1",
+        "httpclient_timeout_sec": 20,
+        "max_requests_min": 9,
+        "log_level": "debug"
     }
 }

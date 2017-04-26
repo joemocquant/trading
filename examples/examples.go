@@ -1,10 +1,14 @@
 package main
 
 import (
+	"trading/ingestion/coinmarketcap"
 	"trading/ingestion/poloniex"
 )
 
 func main() {
 
-	poloniex.Ingest()
+	go poloniex.Ingest()
+	go coinmarketcap.Ingest()
+
+	select {}
 }

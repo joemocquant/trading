@@ -24,7 +24,7 @@ func ingestPublicTicks() {
 	ticks, err := publicClient.GetTickers()
 
 	for err != nil {
-		log.WithField("error", err).Error("ingestion.ingestPublicTicks: publicClient.GetTickers")
+		log.WithField("error", err).Error("poloniex.ingestPublicTicks: publicClient.GetTickers")
 		time.Sleep(5 * time.Second)
 		ticks, err = publicClient.GetTickers()
 	}
@@ -33,7 +33,7 @@ func ingestPublicTicks() {
 	for currencyPair, tick := range ticks {
 		pt, err := preparePublicTickPoint(currencyPair, tick)
 		if err != nil {
-			log.WithField("error", err).Error("ingestion.getNewTicks: ingestion.prepareTickPoint")
+			log.WithField("error", err).Error("poloniex.getNewTicks: poloniex.prepareTickPoint")
 			continue
 		}
 		points = append(points, pt)
@@ -76,7 +76,7 @@ func ingestPushTicks() {
 	ticker, err := pushClient.SubscribeTicker()
 
 	for err != nil {
-		log.WithField("error", err).Error("ingestion.ingestTickers: pushClient.SubscribeTicker")
+		log.WithField("error", err).Error("poloniex.ingestTickers: pushClient.SubscribeTicker")
 		time.Sleep(5 * time.Second)
 		ticker, err = pushClient.SubscribeTicker()
 	}
@@ -88,7 +88,7 @@ func ingestPushTicks() {
 
 			pt, err := preparePushTickPoint(tick)
 			if err != nil {
-				log.WithField("error", err).Error("ingestion.getNewTicks: ingestion.prepareTickPoint")
+				log.WithField("error", err).Error("poloniex.getNewTicks: poloniex.prepareTickPoint")
 				return
 			}
 			pointsToWrite <- &batchPoints{"ticks", []*influxDBClient.Point{pt}}

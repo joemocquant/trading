@@ -76,7 +76,9 @@ func init() {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	dbClient = ingestion.NewdbClient()
+	if dbClient, err = ingestion.NewdbClient(); err != nil {
+		log.WithField("error", err).Fatal("NewdbClient")
+	}
 
 	publicClient = publicapi.NewPublicClient()
 
@@ -103,7 +105,7 @@ func Ingest() {
 
 	//-- Ticks
 
-	// Ingest tickers
+	// Ingest ticks
 	go ingestTicks()
 
 	//-- OrderBooks
@@ -120,8 +122,6 @@ func Ingest() {
 			<-time.After(time.Duration(conf.MarketCheckPeriodMin) * time.Minute)
 		}
 	}()
-
-	select {}
 }
 
 func flushPoints(batchCount int) {
@@ -131,7 +131,7 @@ func flushPoints(batchCount int) {
 		Precision: "ns",
 	})
 	if err != nil {
-		log.WithField("error", err).Error("ingestion.flushPoints: dbClient.NewBatchPoints")
+		log.WithField("error", err).Error("poloniex.flushPoints: dbClient.NewBatchPoints")
 		return
 	}
 
@@ -142,16 +142,14 @@ func flushPoints(batchCount int) {
 	}
 
 	for _, batchPoints := range batchPointsArr {
-		for _, pt := range batchPoints.points {
-			bp.AddPoint(pt)
-		}
+		bp.AddPoints(batchPoints.points)
 	}
 
 	if err := dbClient.Write(bp); err != nil {
 		log.WithFields(log.Fields{
 			"batchPoints": bp,
 			"error":       err,
-		}).Error("ingestion.flushPoints: ingestion.dbClient.Write")
+		}).Error("poloniex.flushPoints: ingestion.dbClient.Write")
 	}
 
 	if log.GetLevel() >= log.DebugLevel {

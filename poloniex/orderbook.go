@@ -14,7 +14,7 @@ func ingestOrderBooks(depth int, period time.Duration) {
 		orderBooks, err := publicClient.GetOrderBooks(depth)
 
 		for err != nil {
-			log.WithField("error", err).Error("ingestion.ingestOrderBooks: publicClient.GetOrderBooks")
+			log.WithField("error", err).Error("poloniex.ingestOrderBooks: publicClient.GetOrderBooks")
 			time.Sleep(5 * time.Second)
 			orderBooks, err = publicClient.GetOrderBooks(depth)
 		}
@@ -59,7 +59,7 @@ func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook,
 
 				pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
 				if err != nil {
-					log.WithField("error", err).Error("ingestion.writeOrderBooks: influxDBClient.NewPoint")
+					log.WithField("error", err).Error("poloniex.writeOrderBooks: influxDBClient.NewPoint")
 					continue
 				}
 				points = append(points, pt)
@@ -88,7 +88,7 @@ func prepareLastOrderBookCheckPoint(currencyPair string, sequence int64, depth i
 
 	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
-		log.WithField("error", err).Error("ingestion.writeOrderBooks: influxDBClient.NewPoint")
+		log.WithField("error", err).Error("poloniex.writeOrderBooks: influxDBClient.NewPoint")
 	}
 	pointsToWrite <- &batchPoints{"orderBookLastCheck", []*influxDBClient.Point{pt}}
 }

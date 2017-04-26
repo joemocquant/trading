@@ -13,7 +13,7 @@ func ingestNewMarkets() {
 	tickers, err := publicClient.GetTickers()
 
 	for err != nil {
-		log.WithField("error", err).Error("ingestion.ingestNewMarkets: publicClient.GetTickers")
+		log.WithField("error", err).Error("poloniex.ingestNewMarkets: publicClient.GetTickers")
 		time.Sleep(5 * time.Second)
 		tickers, err = publicClient.GetTickers()
 	}
@@ -40,7 +40,7 @@ func ingestNewMarkets() {
 			log.WithFields(log.Fields{
 				"currencyPair": currencyPair,
 				"error":        err,
-			}).Error("ingestion.ingestNewMarkets: pushClient.SubscribeMarket")
+			}).Error("poloniex.ingestNewMarkets: pushClient.SubscribeMarket")
 			continue
 		}
 
@@ -62,7 +62,7 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 
 				pt, err := prepareMarketPoint(marketUpdate, currencyPair, marketUpdates.Sequence)
 				if err != nil {
-					log.WithField("error", err).Error("ingestion.getMarketNewPoints: ingestion.prepareMarketPoint")
+					log.WithField("error", err).Error("poloniex.getMarketNewPoints: poloniex.prepareMarketPoint")
 					continue
 				}
 

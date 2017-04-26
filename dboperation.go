@@ -77,7 +77,7 @@ func init() {
 	}
 }
 
-func NewdbClient() influxDBClient.Client {
+func NewdbClient() (influxDBClient.Client, error) {
 
 	dbClient, err := influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
 		Addr:      conf.Host,
@@ -87,8 +87,8 @@ func NewdbClient() influxDBClient.Client {
 	})
 
 	if err != nil {
-		log.WithField("error", err).Fatal("influxDBClient.NewHTTPClient")
+		return nil, err
 	}
 
-	return dbClient
+	return dbClient, nil
 }
