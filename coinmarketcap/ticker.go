@@ -4,8 +4,8 @@ import (
 	"time"
 	"trading/coinmarketcap"
 
+	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 func ingestTicks() {
@@ -14,7 +14,7 @@ func ingestTicks() {
 		ticks, err := coinmarketcapClient.GetTickers()
 
 		for err != nil {
-			log.WithField("error", err).Error("coinmarketcap.ingestTicks: publicClient.GetTickers")
+			logger.WithField("error", err).Error("ingestTicks: publicClient.GetTickers")
 			time.Sleep(5 * time.Second)
 			ticks, err = coinmarketcapClient.GetTickers()
 		}
@@ -24,7 +24,7 @@ func ingestTicks() {
 
 			pt, err := prepareTickPoint(tick)
 			if err != nil {
-				log.WithField("error", err).Error("coinmarketcap.ingestTicks: coinmarketcap.prepareTickPoint")
+				logger.WithField("error", err).Error("ingestTicks: coinmarketcap.prepareTickPoint")
 				continue
 			}
 			points = append(points, pt)
@@ -77,21 +77,21 @@ func flushTickPoints(points []*influxDBClient.Point) {
 	})
 
 	if err != nil {
-		log.WithField("error", err).Error("coinmarketcap.flushTickPoints: dbClient.NewBatchPoints")
+		logger.WithField("error", err).Error("flushTickPoints: dbClient.NewBatchPoints")
 		return
 	}
 
 	bp.AddPoints(points)
 
 	if err := dbClient.Write(bp); err != nil {
-		log.WithFields(log.Fields{
+		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,
-		}).Error("coinmarketcap.flushTickPoints: coinmarketcap.dbClient.Write")
+		}).Error("flushTickPoints: dbClient.Write")
 		return
 	}
 
-	if log.GetLevel() >= log.DebugLevel {
-		log.Debugf("Flushed: %d ticks", len(points))
+	if logrus.GetLevel() >= logrus.DebugLevel {
+		logger.Debugf("Flushed: %d ticks", len(points))
 	}
 }

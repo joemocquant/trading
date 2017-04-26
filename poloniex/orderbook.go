@@ -5,7 +5,6 @@ import (
 	"trading/poloniex/publicapi"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 func ingestOrderBooks(depth int, period time.Duration) {
@@ -14,7 +13,7 @@ func ingestOrderBooks(depth int, period time.Duration) {
 		orderBooks, err := publicClient.GetOrderBooks(depth)
 
 		for err != nil {
-			log.WithField("error", err).Error("poloniex.ingestOrderBooks: publicClient.GetOrderBooks")
+			logger.WithField("error", err).Error("ingestOrderBooks: publicClient.GetOrderBooks")
 			time.Sleep(5 * time.Second)
 			orderBooks, err = publicClient.GetOrderBooks(depth)
 		}
@@ -59,7 +58,7 @@ func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook,
 
 				pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
 				if err != nil {
-					log.WithField("error", err).Error("poloniex.writeOrderBooks: influxDBClient.NewPoint")
+					logger.WithField("error", err).Error("prepareOrderBookPoints: influxDBClient.NewPoint")
 					continue
 				}
 				points = append(points, pt)
@@ -88,7 +87,7 @@ func prepareLastOrderBookCheckPoint(currencyPair string, sequence int64, depth i
 
 	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
-		log.WithField("error", err).Error("poloniex.writeOrderBooks: influxDBClient.NewPoint")
+		logger.WithField("error", err).Error("prepareLastOrderBookCheckPoint: influxDBClient.NewPoint")
 	}
 	pointsToWrite <- &batchPoints{"orderBookLastCheck", []*influxDBClient.Point{pt}}
 }

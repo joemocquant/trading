@@ -4,8 +4,8 @@ import (
 	"time"
 	"trading/poloniex/pushapi"
 
+	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 func ingestNewMarkets() {
@@ -13,7 +13,7 @@ func ingestNewMarkets() {
 	tickers, err := publicClient.GetTickers()
 
 	for err != nil {
-		log.WithField("error", err).Error("poloniex.ingestNewMarkets: publicClient.GetTickers")
+		logger.WithField("error", err).Error("ingestNewMarkets: publicClient.GetTickers")
 		time.Sleep(5 * time.Second)
 		tickers, err = publicClient.GetTickers()
 	}
@@ -28,7 +28,7 @@ func ingestNewMarkets() {
 	}
 
 	if len(newMarkets) > 0 {
-		log.WithField("newMarkets", newMarkets).Infof("Ingesting %d new markets", len(newMarkets))
+		logger.WithField("newMarkets", newMarkets).Infof("Ingesting %d new markets", len(newMarkets))
 	}
 
 	for _, currencyPair := range newMarkets {
@@ -37,10 +37,10 @@ func ingestNewMarkets() {
 
 		if err != nil {
 
-			log.WithFields(log.Fields{
+			logger.WithFields(logrus.Fields{
 				"currencyPair": currencyPair,
 				"error":        err,
-			}).Error("poloniex.ingestNewMarkets: pushClient.SubscribeMarket")
+			}).Error("ingestNewMarkets: pushClient.SubscribeMarket")
 			continue
 		}
 
@@ -62,7 +62,7 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 
 				pt, err := prepareMarketPoint(marketUpdate, currencyPair, marketUpdates.Sequence)
 				if err != nil {
-					log.WithField("error", err).Error("poloniex.getMarketNewPoints: poloniex.prepareMarketPoint")
+					logger.WithField("error", err).Error("getMarketNewPoints: prepareMarketPoint")
 					continue
 				}
 

@@ -4,8 +4,8 @@ import (
 	"time"
 	"trading/coinmarketcap"
 
+	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 func ingestGlobalData() {
@@ -14,14 +14,14 @@ func ingestGlobalData() {
 		globalData, err := coinmarketcapClient.GetGlobalData()
 
 		for err != nil {
-			log.WithField("error", err).Error("coinmarketcap.ingestGlobalData: publicClient.GetGlobalData")
+			logger.WithField("error", err).Error("ingestGlobalData: publicClient.GetGlobalData")
 			time.Sleep(5 * time.Second)
 			globalData, err = coinmarketcapClient.GetGlobalData()
 		}
 
 		pt, err := prepareGlobalDataPoint(globalData)
 		if err != nil {
-			log.WithField("error", err).Error("coinmarketcap.ingestGlobalData: coinmarketcap.prepareGlobalDataPoint")
+			logger.WithField("error", err).Error("ingestGlobalData: prepareGlobalDataPoint")
 			continue
 		}
 
@@ -29,7 +29,6 @@ func ingestGlobalData() {
 
 		<-time.After(time.Duration(conf.GlobalDataCheckPeriodMin) * time.Minute)
 	}
-
 }
 
 func prepareGlobalDataPoint(gd *coinmarketcap.GlobalData) (*influxDBClient.Point, error) {
@@ -61,21 +60,21 @@ func flushGlobalDataPoint(point *influxDBClient.Point) {
 	})
 
 	if err != nil {
-		log.WithField("error", err).Error("coinmarketcap.flushGlobalDataPoint: dbClient.NewBatchPoints")
+		logger.WithField("error", err).Error("flushGlobalDataPoint: dbClient.NewBatchPoints")
 		return
 	}
 
 	bp.AddPoint(point)
 
 	if err := dbClient.Write(bp); err != nil {
-		log.WithFields(log.Fields{
+		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,
-		}).Error("coinmarketcap.flushGlobalDataPoint: coinmarketcap.dbClient.Write")
+		}).Error("flushGlobalDataPoint: dbClient.Write")
 		return
 	}
 
-	if log.GetLevel() >= log.DebugLevel {
-		log.Debug("Flushed: global data")
+	if logrus.GetLevel() >= logrus.DebugLevel {
+		logger.Debug("Flushed: global data")
 	}
 }

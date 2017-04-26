@@ -6,7 +6,6 @@ import (
 	"trading/poloniex/pushapi"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 func ingestTicks() {
@@ -24,7 +23,7 @@ func ingestPublicTicks() {
 	ticks, err := publicClient.GetTickers()
 
 	for err != nil {
-		log.WithField("error", err).Error("poloniex.ingestPublicTicks: publicClient.GetTickers")
+		logger.WithField("error", err).Error("ingestPublicTicks: publicClient.GetTickers")
 		time.Sleep(5 * time.Second)
 		ticks, err = publicClient.GetTickers()
 	}
@@ -33,7 +32,7 @@ func ingestPublicTicks() {
 	for currencyPair, tick := range ticks {
 		pt, err := preparePublicTickPoint(currencyPair, tick)
 		if err != nil {
-			log.WithField("error", err).Error("poloniex.getNewTicks: poloniex.prepareTickPoint")
+			logger.WithField("error", err).Error("ingestPublicTicks: preparePublicTickPoint")
 			continue
 		}
 		points = append(points, pt)
@@ -76,7 +75,7 @@ func ingestPushTicks() {
 	ticker, err := pushClient.SubscribeTicker()
 
 	for err != nil {
-		log.WithField("error", err).Error("poloniex.ingestTickers: pushClient.SubscribeTicker")
+		logger.WithField("error", err).Error("ingestPushTicks: pushClient.SubscribeTicker")
 		time.Sleep(5 * time.Second)
 		ticker, err = pushClient.SubscribeTicker()
 	}
@@ -88,7 +87,7 @@ func ingestPushTicks() {
 
 			pt, err := preparePushTickPoint(tick)
 			if err != nil {
-				log.WithField("error", err).Error("poloniex.getNewTicks: poloniex.prepareTickPoint")
+				logger.WithField("error", err).Error("ingestPushTicks: poloniex.prepareTickPoint")
 				return
 			}
 			pointsToWrite <- &batchPoints{"ticks", []*influxDBClient.Point{pt}}

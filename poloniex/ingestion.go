@@ -8,12 +8,13 @@ import (
 	"trading/poloniex/publicapi"
 	"trading/poloniex/pushapi"
 
+	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
 	conf           *configuration
+	logger         *logrus.Entry
 	dbClient       influxDBClient.Client
 	publicClient   *publicapi.PublicClient
 	pushClient     *pushapi.PushClient
@@ -45,46 +46,48 @@ type batchPoints struct {
 
 func init() {
 
-	customFormatter := new(log.TextFormatter)
+	customFormatter := new(logrus.TextFormatter)
 	customFormatter.FullTimestamp = true
-	log.SetFormatter(customFormatter)
+	logrus.SetFormatter(customFormatter)
+
+	logger = logrus.WithField("context", "[ingestion:poloniex]")
 
 	content, err := ioutil.ReadFile("conf.json")
 
 	if err != nil {
-		log.WithField("error", err).Fatal("loading configuration")
+		logger.WithField("error", err).Fatal("loading configuration")
 	}
 
 	if err := json.Unmarshal(content, &conf); err != nil {
-		log.WithField("error", err).Fatal("loading configuration")
+		logger.WithField("error", err).Fatal("loading configuration")
 	}
 
 	switch conf.LogLevel {
 	case "debug":
-		log.SetLevel(log.DebugLevel)
+		logrus.SetLevel(logrus.DebugLevel)
 	case "info":
-		log.SetLevel(log.InfoLevel)
+		logrus.SetLevel(logrus.InfoLevel)
 	case "warn":
-		log.SetLevel(log.WarnLevel)
+		logrus.SetLevel(logrus.WarnLevel)
 	case "error":
-		log.SetLevel(log.ErrorLevel)
+		logrus.SetLevel(logrus.ErrorLevel)
 	case "fatal":
-		log.SetLevel(log.FatalLevel)
+		logrus.SetLevel(logrus.FatalLevel)
 	case "panic":
-		log.SetLevel(log.PanicLevel)
+		logrus.SetLevel(logrus.PanicLevel)
 	default:
-		log.SetLevel(log.WarnLevel)
+		logrus.SetLevel(logrus.WarnLevel)
 	}
 
 	if dbClient, err = ingestion.NewdbClient(); err != nil {
-		log.WithField("error", err).Fatal("NewdbClient")
+		logger.WithField("error", err).Fatal("ingestion.NewdbClient")
 	}
 
 	publicClient = publicapi.NewPublicClient()
 
 	pushClient, err = pushapi.NewPushClient()
 	if err != nil {
-		log.WithField("error", err).Fatal("pushapi.NewPushClient")
+		logger.WithField("error", err).Fatal("pushapi.NewPushClient")
 	}
 
 	marketUpdaters = make(map[string]pushapi.MarketUpdater)
@@ -131,7 +134,7 @@ func flushPoints(batchCount int) {
 		Precision: "ns",
 	})
 	if err != nil {
-		log.WithField("error", err).Error("poloniex.flushPoints: dbClient.NewBatchPoints")
+		logger.WithField("error", err).Error("flushPoints: dbClient.NewBatchPoints")
 		return
 	}
 
@@ -146,13 +149,13 @@ func flushPoints(batchCount int) {
 	}
 
 	if err := dbClient.Write(bp); err != nil {
-		log.WithFields(log.Fields{
+		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,
-		}).Error("poloniex.flushPoints: ingestion.dbClient.Write")
+		}).Error("flushPoints: dbClient.Write")
 	}
 
-	if log.GetLevel() >= log.DebugLevel {
+	if logrus.GetLevel() >= logrus.DebugLevel {
 		flushDebug(batchPointsArr)
 	}
 }
@@ -182,7 +185,7 @@ func flushDebug(batchPointsArr []*batchPoints) {
 		}
 	}
 
-	log.Debugf("Flushed: %d batchs (%d points)\n"+
+	logger.Debugf("Flushed: %d batchs (%d points)\n"+
 		"\t%d orderBook batchs (%d points)\n"+
 		"\t%d orderBookLastCheck batchs (%d points)\n"+
 		"\t%d market batchs (%d points)\n"+

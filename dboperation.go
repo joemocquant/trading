@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
+	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
 	conf      *configuration
+	logger    *logrus.Entry
 	tlsConfig *tls.Config
 )
 
@@ -32,47 +33,49 @@ type influxdbConf struct {
 
 func init() {
 
-	customFormatter := new(log.TextFormatter)
+	customFormatter := new(logrus.TextFormatter)
 	customFormatter.FullTimestamp = true
-	log.SetFormatter(customFormatter)
+	logrus.SetFormatter(customFormatter)
+
+	logger = logrus.WithField("context", "[ingestion]")
 
 	content, err := ioutil.ReadFile("conf.json")
 
 	if err != nil {
-		log.WithField("error", err).Fatal("loading configuration")
+		logger.WithField("error", err).Fatal("loading configuration")
 	}
 
 	if err := json.Unmarshal(content, &conf); err != nil {
-		log.WithField("error", err).Fatal("loading configuration")
+		logger.WithField("error", err).Fatal("loading configuration")
 	}
 
 	switch conf.LogLevel {
 	case "debug":
-		log.SetLevel(log.DebugLevel)
+		logrus.SetLevel(logrus.DebugLevel)
 	case "info":
-		log.SetLevel(log.InfoLevel)
+		logrus.SetLevel(logrus.InfoLevel)
 	case "warn":
-		log.SetLevel(log.WarnLevel)
+		logrus.SetLevel(logrus.WarnLevel)
 	case "error":
-		log.SetLevel(log.ErrorLevel)
+		logrus.SetLevel(logrus.ErrorLevel)
 	case "fatal":
-		log.SetLevel(log.FatalLevel)
+		logrus.SetLevel(logrus.FatalLevel)
 	case "panic":
-		log.SetLevel(log.PanicLevel)
+		logrus.SetLevel(logrus.PanicLevel)
 	default:
-		log.SetLevel(log.WarnLevel)
+		logrus.SetLevel(logrus.WarnLevel)
 	}
 
 	tlsConfig = &tls.Config{RootCAs: x509.NewCertPool()}
 	certPath := conf.TlsCertificatePath
 
 	if crt, err := ioutil.ReadFile(certPath); err != nil {
-		log.WithField("error", err).Fatal("reading certificate")
+		logger.WithField("error", err).Fatal("reading certificate")
 
 	} else {
 
 		if ok := tlsConfig.RootCAs.AppendCertsFromPEM(crt); !ok {
-			log.Fatal("cannot append certificate")
+			logger.Fatal("cannot append certificate")
 		}
 	}
 }
