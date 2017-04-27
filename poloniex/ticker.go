@@ -4,6 +4,7 @@ import (
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
+	"trading/ingestion"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -28,7 +29,7 @@ func ingestPublicTicks() {
 		ticks, err = publicClient.GetTickers()
 	}
 
-	points := make([]*influxDBClient.Point, 0)
+	points := make([]*influxDBClient.Point, 0, len(ticks))
 	for currencyPair, tick := range ticks {
 		pt, err := preparePublicTickPoint(currencyPair, tick)
 		if err != nil {
@@ -38,7 +39,7 @@ func ingestPublicTicks() {
 		points = append(points, pt)
 	}
 
-	pointsToWrite <- &batchPoints{"ticks", points}
+	batchsToWrite <- &ingestion.BatchPoints{"tick", points}
 }
 
 func preparePublicTickPoint(currencyPair string, tick *publicapi.Tick) (*influxDBClient.Point, error) {
@@ -90,7 +91,10 @@ func ingestPushTicks() {
 				logger.WithField("error", err).Error("ingestPushTicks: poloniex.prepareTickPoint")
 				return
 			}
-			pointsToWrite <- &batchPoints{"ticks", []*influxDBClient.Point{pt}}
+			batchsToWrite <- &ingestion.BatchPoints{
+				"ticks",
+				[]*influxDBClient.Point{pt},
+			}
 
 		}(tick)
 

@@ -13,7 +13,7 @@ import (
 var (
 	conf                *configuration
 	logger              *logrus.Entry
-	dbClient            influxDBClient.Client
+	dbClient            *influxDBClient.Client
 	coinmarketcapClient *coinmarketcap.Client
 )
 

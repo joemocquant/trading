@@ -36,6 +36,10 @@ func prepareGlobalDataPoint(gd *coinmarketcap.GlobalData) (*influxDBClient.Point
 	measurement := conf.Schema["global_data_measurement"]
 	timestamp := time.Now()
 
+	tags := map[string]string{
+		"source": "coinmarketcap",
+	}
+
 	fields := map[string]interface{}{
 		"total_market_cap_usd":             gd.TotalMarketCapUSD,
 		"total_24h_volume_usd":             gd.Total24hVolumeUSD,
@@ -45,7 +49,7 @@ func prepareGlobalDataPoint(gd *coinmarketcap.GlobalData) (*influxDBClient.Point
 		"active_markets":                   gd.ActiveMarkets,
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, nil, fields, timestamp)
+	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +70,7 @@ func flushGlobalDataPoint(point *influxDBClient.Point) {
 
 	bp.AddPoint(point)
 
-	if err := dbClient.Write(bp); err != nil {
+	if err := (*dbClient).Write(bp); err != nil {
 		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,
@@ -75,6 +79,6 @@ func flushGlobalDataPoint(point *influxDBClient.Point) {
 	}
 
 	if logrus.GetLevel() >= logrus.DebugLevel {
-		logger.Debug("Flushed: global data")
+		logger.Debug("[Coinmarketcap flush]: global data")
 	}
 }

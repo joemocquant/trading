@@ -1,6 +1,7 @@
 package main
 
 import (
+	"trading/ingestion/bittrex"
 	"trading/ingestion/coinmarketcap"
 	"trading/ingestion/poloniex"
 )
@@ -8,6 +9,7 @@ import (
 func main() {
 
 	go poloniex.Ingest()
+	go bittrex.Ingest()
 	go coinmarketcap.Ingest()
 
 	select {}

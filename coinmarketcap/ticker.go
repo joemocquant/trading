@@ -19,7 +19,7 @@ func ingestTicks() {
 			ticks, err = coinmarketcapClient.GetTickers()
 		}
 
-		points := make([]*influxDBClient.Point, 0)
+		points := make([]*influxDBClient.Point, 0, len(ticks))
 		for _, tick := range ticks {
 
 			pt, err := prepareTickPoint(tick)
@@ -83,7 +83,7 @@ func flushTickPoints(points []*influxDBClient.Point) {
 
 	bp.AddPoints(points)
 
-	if err := dbClient.Write(bp); err != nil {
+	if err := (*dbClient).Write(bp); err != nil {
 		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,
@@ -92,6 +92,6 @@ func flushTickPoints(points []*influxDBClient.Point) {
 	}
 
 	if logrus.GetLevel() >= logrus.DebugLevel {
-		logger.Debugf("Flushed: %d ticks", len(points))
+		logger.Debugf("[Coinmarketcap flush]: %d ticks", len(points))
 	}
 }

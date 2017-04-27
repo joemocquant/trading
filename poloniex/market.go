@@ -3,6 +3,7 @@ package poloniex
 import (
 	"time"
 	"trading/api/poloniex/pushapi"
+	"trading/ingestion"
 
 	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
@@ -20,7 +21,7 @@ func ingestNewMarkets() {
 
 	// Might need to filter out frozen markets
 
-	newMarkets := make([]string, 0)
+	newMarkets := make([]string, 0, len(tickers))
 	for currencyPair, _ := range tickers {
 		if _, ok := marketUpdaters[currencyPair]; !ok {
 			newMarkets = append(newMarkets, currencyPair)
@@ -68,7 +69,7 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 
 				points = append(points, pt)
 			}
-			pointsToWrite <- &batchPoints{"markets", points}
+			batchsToWrite <- &ingestion.BatchPoints{"market", points}
 
 		}(marketUpdates)
 
@@ -78,8 +79,8 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 	currencyPair string, sequence int64) (*influxDBClient.Point, error) {
 
-	tags := make(map[string]string)
-	fields := make(map[string]interface{})
+	tags := make(map[string]string, 3)
+	fields := make(map[string]interface{}, 3)
 	var measurement string
 	var timestamp time.Time
 

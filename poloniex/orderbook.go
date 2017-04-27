@@ -3,6 +3,7 @@ package poloniex
 import (
 	"time"
 	"trading/api/poloniex/publicapi"
+	"trading/ingestion"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -67,7 +68,7 @@ func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook,
 
 	processOrderBookPoints(currencyPair, "ask", orderBook.Asks, orderBook.Seq)
 	processOrderBookPoints(currencyPair, "bid", orderBook.Bids, orderBook.Seq)
-	pointsToWrite <- &batchPoints{"orderBook", points}
+	batchsToWrite <- &ingestion.BatchPoints{"orderBook", points}
 }
 
 func prepareLastOrderBookCheckPoint(currencyPair string, sequence int64, depth int) {
@@ -89,5 +90,8 @@ func prepareLastOrderBookCheckPoint(currencyPair string, sequence int64, depth i
 	if err != nil {
 		logger.WithField("error", err).Error("prepareLastOrderBookCheckPoint: influxDBClient.NewPoint")
 	}
-	pointsToWrite <- &batchPoints{"orderBookLastCheck", []*influxDBClient.Point{pt}}
+	batchsToWrite <- &ingestion.BatchPoints{
+		"orderBookLastCheck",
+		[]*influxDBClient.Point{pt},
+	}
 }

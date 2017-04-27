@@ -1,62 +1,82 @@
 {
-    "ingestion": {
+  "ingestion": {
 
-        "influxdb": {
-            "host": "https://localhost:8086",
-            "auth": {
-                "username": "ingest",
-                "password": "ingestpass"
-            },
-            "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
-            "log_level": "debug"
-        },
-
-        "poloniex": {
-            "schema": {
-                "database": "poloniex",
-                "book_updates_measurement": "book_updates",
-                "trade_updates_measurement": "trade_updates",
-                "book_orders_measurement": "book_orders",
-                "book_orders_last_check_measurement": "book_orders_last_check",
-                "ticks_measurement": "ticks"
-            },
-            "public_ticks_check_period_sec": 30,
-            "order_books_check_period_sec": 30,
-            "market_check_period_min": 1,
-            "flush_points_period_ms": 500,
-            "log_level": "debug"
-        },
-
-        "coinmarketcap": {
-            "schema": {
-                "database": "coinmarketcap",
-                "ticks_measurement": "ticks",
-                "global_data_measurement": "global_data"
-            },
-            "ticks_check_period_min": 5,
-            "global_data_check_period_min": 5,
-            "log_level": "debug"
-        }
+    "influxdb": {
+      "host": "https://localhost:8086",
+      "auth": {
+        "username": "ingest",
+        "password": "ingestpass"
+      },
+      "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
+      "log_level": "debug"
     },
 
-    "poloniex_public_api": {
-        "api_url": "https://poloniex.com/public",
-        "httpclient_timeout_sec": 20,
-        "max_requests_sec": 5,
-        "log_level": "debug"
+    "poloniex": {
+      "schema": {
+        "database": "poloniex",
+        "book_updates_measurement": "book_updates",
+        "trade_updates_measurement": "trade_updates",
+        "book_orders_measurement": "book_orders",
+        "book_orders_last_check_measurement": "book_orders_last_check",
+        "ticks_measurement": "ticks"
+      },
+      "public_ticks_check_period_sec": 30,
+      "market_check_period_min": 1,
+      "order_books_check_period_sec": 30,
+      "flush_batchs_period_ms": 1000,
+      "log_level": "debug"
     },
 
-    "poloniex_push_api": {
-        "wss_uri": "wss://api.poloniex.com",
-        "realm": "realm1",
-        "log_level": "debug",
-        "timeout_sec": 30
+    "bittrex": {
+      "schema": {
+        "database": "bittrex",
+        "book_orders_measurement": "book_orders",
+        "market_summaries_measurement": "market_summaries"
+      },
+      "market_summaries_check_period_sec": 30,
+      "markets_check_period_min": 5,
+      "order_books_check_period_sec": 45,
+      "flush_batchs_period_sec": 5,
+      "log_level": "debug"
     },
 
     "coinmarketcap": {
-        "api_url":  "https://api.coinmarketcap.com/v1",
-        "httpclient_timeout_sec": 20,
-        "max_requests_min": 9,
-        "log_level": "debug"
+      "schema": {
+        "database": "coinmarketcap",
+        "ticks_measurement": "ticks",
+        "global_data_measurement": "global_data"
+      },
+      "ticks_check_period_min": 5,
+      "global_data_check_period_min": 5,
+      "log_level": "debug"
     }
+  },
+
+  "poloniex_public_api": {
+    "api_url": "https://poloniex.com/public",
+    "httpclient_timeout_sec": 20,
+    "max_requests_sec": 5,
+    "log_level": "debug"
+  },
+
+  "poloniex_push_api": {
+    "wss_uri": "wss://api.poloniex.com",
+    "realm": "realm1",
+    "log_level": "debug",
+    "timeout_sec": 30
+  },
+
+  "bittrex_public_api": {
+    "api_url": "https://bittrex.com/api/v1.1/public",
+    "httpclient_timeout_sec": 20,
+    "max_requests_sec": 10,
+    "log_level": "debug"
+  },
+
+  "coinmarketcap_api": {
+    "api_url":  "https://api.coinmarketcap.com/v1",
+    "httpclient_timeout_sec": 20,
+    "max_requests_min": 9,
+    "log_level": "debug"
+  }
 }
