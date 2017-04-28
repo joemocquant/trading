@@ -12,7 +12,7 @@ func ingestOrderBooks() {
 
 	for {
 
-		markets := getMarkets()
+		markets := getActiveMarkets()
 
 		for _, marketName := range markets {
 			go ingestOrderBook(marketName)

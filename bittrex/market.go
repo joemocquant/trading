@@ -24,7 +24,7 @@ func checkMarkets() {
 	}
 }
 
-func getMarkets() []string {
+func getActiveMarkets() []string {
 
 	am.Lock()
 	defer am.Unlock()
