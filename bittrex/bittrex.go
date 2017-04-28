@@ -16,7 +16,7 @@ var (
 	conf          *configuration
 	logger        *logrus.Entry
 	dbClient      *influxDBClient.Client
-	publicClient  *publicapi.PublicClient
+	publicClient  *publicapi.Client
 	am            *allMarkets
 	batchsToWrite chan *ingestion.BatchPoints
 )
@@ -82,7 +82,7 @@ func init() {
 		logger.WithField("error", err).Fatal("ingestion.NewdbClient")
 	}
 
-	publicClient = publicapi.NewPublicClient()
+	publicClient = publicapi.NewClient()
 	am = &allMarkets{sync.Mutex{}, make(map[string]*publicapi.Market)}
 	batchsToWrite = make(chan *ingestion.BatchPoints, 2000)
 }

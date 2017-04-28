@@ -16,8 +16,8 @@ var (
 	conf           *configuration
 	logger         *logrus.Entry
 	dbClient       *influxDBClient.Client
-	publicClient   *publicapi.PublicClient
-	pushClient     *pushapi.PushClient
+	publicClient   *publicapi.Client
+	pushClient     *pushapi.Client
 	marketUpdaters map[string]pushapi.MarketUpdater
 	batchsToWrite  chan *ingestion.BatchPoints
 )
@@ -78,9 +78,9 @@ func init() {
 		logger.WithField("error", err).Fatal("ingestion.NewdbClient")
 	}
 
-	publicClient = publicapi.NewPublicClient()
+	publicClient = publicapi.NewClient()
 
-	pushClient, err = pushapi.NewPushClient()
+	pushClient, err = pushapi.NewClient()
 	if err != nil {
 		logger.WithField("error", err).Fatal("pushapi.NewPushClient")
 	}
