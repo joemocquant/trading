@@ -92,7 +92,7 @@ func ingestPushTicks() {
 				return
 			}
 			batchsToWrite <- &ingestion.BatchPoints{
-				"ticks",
+				"tick",
 				[]*influxDBClient.Point{pt},
 			}
 
