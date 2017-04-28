@@ -10,6 +10,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 var (
@@ -41,11 +42,13 @@ type poloniexConf struct {
 
 func init() {
 
-	customFormatter := new(logrus.TextFormatter)
+	customFormatter := new(prefixed.TextFormatter)
 	customFormatter.FullTimestamp = true
+	customFormatter.ForceColors = true
+	customFormatter.ForceFormatting = true
 	logrus.SetFormatter(customFormatter)
 
-	logger = logrus.WithField("context", "[ingestion:poloniex]")
+	logger = logrus.WithField("prefix", "[ingestion:poloniex]")
 
 	content, err := ioutil.ReadFile("conf.json")
 

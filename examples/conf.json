@@ -33,10 +33,10 @@
         "book_orders_measurement": "book_orders",
         "market_summaries_measurement": "market_summaries"
       },
-      "market_summaries_check_period_sec": 30,
+      "market_summaries_check_period_sec": 15,
       "markets_check_period_min": 5,
-      "order_books_check_period_sec": 45,
-      "flush_batchs_period_sec": 5,
+      "order_books_check_period_sec": 15,
+      "flush_batchs_period_sec": 1,
       "log_level": "debug"
     },
 
@@ -69,7 +69,7 @@
   "bittrex_public_api": {
     "api_url": "https://bittrex.com/api/v1.1/public",
     "httpclient_timeout_sec": 20,
-    "max_requests_sec": 10,
+    "max_requests_sec": 100,
     "log_level": "debug"
   },
 
