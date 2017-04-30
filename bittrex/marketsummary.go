@@ -52,7 +52,6 @@ func prepareMarketSummaryPoint(ms *publicapi.MarketSummary) (*influxDBClient.Poi
 		"volume":           ms.Volume,
 		"last":             ms.Last,
 		"base_volume":      ms.BaseVolume,
-		"timestamp":        ms.TimeStamp,
 		"bid":              ms.Bid,
 		"ask":              ms.Ask,
 		"open_buy_orders":  ms.OpenBuyOrders,
