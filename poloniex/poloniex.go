@@ -37,6 +37,7 @@ type poloniexConf struct {
 	MarketCheckPeriodMin      int               `json:"market_check_period_min"`
 	OrderBooksCheckPeriodSec  int               `json:"order_books_check_period_sec"`
 	FlushBatchsPeriodMs       int               `json:"flush_batchs_period_ms"`
+	FlushCapacity             int               `json:"flush_capacity"`
 	LogLevel                  string            `json:"log_level"`
 }
 
@@ -89,7 +90,7 @@ func init() {
 	}
 
 	marketUpdaters = make(map[string]pushapi.MarketUpdater)
-	batchsToWrite = make(chan *ingestion.BatchPoints, 2000)
+	batchsToWrite = make(chan *ingestion.BatchPoints, conf.FlushCapacity)
 }
 
 func Ingest() {

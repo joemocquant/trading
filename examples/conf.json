@@ -24,6 +24,7 @@
       "market_check_period_min": 1,
       "order_books_check_period_sec": 30,
       "flush_batchs_period_ms": 1000,
+      "flush_capacity": 2000,
       "log_level": "debug"
     },
 
@@ -37,6 +38,7 @@
       "markets_check_period_min": 5,
       "order_books_check_period_sec": 15,
       "flush_batchs_period_sec": 1,
+      "flush_capacity": 2000,
       "log_level": "debug"
     },
 

@@ -36,6 +36,7 @@ type bittrexConf struct {
 	MarketsCheckPeriodMin         int               `json:"markets_check_period_min"`
 	OrderBooksCheckPeriodSec      int               `json:"order_books_check_period_sec"`
 	FlushBatchsPeriodSec          int               `json:"flush_batchs_period_sec"`
+	FlushCapacity                 int               `json:"flush_capacity"`
 	LogLevel                      string            `json:"log_level"`
 }
 
@@ -87,7 +88,7 @@ func init() {
 
 	publicClient = publicapi.NewClient()
 	am = &allMarkets{sync.Mutex{}, make(map[string]*publicapi.Market)}
-	batchsToWrite = make(chan *ingestion.BatchPoints, 2000)
+	batchsToWrite = make(chan *ingestion.BatchPoints, conf.FlushCapacity)
 }
 
 func Ingest() {
