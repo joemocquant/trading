@@ -46,13 +46,13 @@ func prepareOrderBookPoints(marketName string, orderBook *publicapi.OrderBook) {
 
 	processOrderBookPoints := func(currencyPair, typeOrder string, orders []*publicapi.Order) {
 
-		for _, order := range orders {
+		tags := map[string]string{
+			"source":     "publicapi",
+			"order_type": typeOrder,
+			"market":     marketName,
+		}
 
-			tags := map[string]string{
-				"source":     "publicapi",
-				"order_type": typeOrder,
-				"market":     marketName,
-			}
+		for _, order := range orders {
 
 			fields := map[string]interface{}{
 				"rate":   order.Rate,

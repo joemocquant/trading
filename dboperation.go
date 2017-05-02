@@ -215,34 +215,44 @@ func flushPoloniexDebug(batchPointsArr []*BatchPoints) {
 
 func flushBittrexDebug(batchPointsArr []*BatchPoints) {
 
-	orderBookBatchCount, marketSummaryBatchCount := 0, 0
-	orderBookPointCount, marketSummaryPointCount := 0, 0
+	marketSummaryBatchCount, marketSummaryPointCount := 0, 0
+	marketHistoryBatchCount, marketHistoryPointCount := 0, 0
+	orderBookBatchCount, orderBookPointCount := 0, 0
 
 	for _, batchPoints := range batchPointsArr {
 		switch batchPoints.TypePoint {
 
-		case "orderBook":
-			orderBookBatchCount++
-			orderBookPointCount += len(batchPoints.Points)
-
 		case "marketSummary":
 			marketSummaryBatchCount++
 			marketSummaryPointCount += len(batchPoints.Points)
+
+		case "marketHistory":
+			marketHistoryBatchCount++
+			marketHistoryPointCount += len(batchPoints.Points)
+
+		case "orderBook":
+			orderBookBatchCount++
+			orderBookPointCount += len(batchPoints.Points)
 		}
 	}
 
 	toPrint := fmt.Sprintf("[Bittrex Flush]: %d batchs (%d points)",
-		orderBookBatchCount+marketSummaryBatchCount,
-		orderBookPointCount+marketSummaryPointCount)
-
-	if orderBookBatchCount > 0 {
-		toPrint += fmt.Sprintf(" %d orderBooks (%d)",
-			orderBookBatchCount, orderBookPointCount)
-	}
+		marketSummaryBatchCount+marketHistoryBatchCount+orderBookBatchCount,
+		marketSummaryPointCount+marketHistoryPointCount+orderBookPointCount)
 
 	if marketSummaryBatchCount > 0 {
 		toPrint += fmt.Sprintf(" %d marketSummaries (%d)",
 			marketSummaryBatchCount, marketSummaryPointCount)
+	}
+
+	if marketHistoryBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d marketHistories (%d)",
+			marketHistoryBatchCount, marketHistoryPointCount)
+	}
+
+	if orderBookBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d orderBooks (%d)",
+			orderBookBatchCount, orderBookPointCount)
 	}
 
 	logger.Debug(toPrint)

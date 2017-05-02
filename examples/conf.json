@@ -31,11 +31,13 @@
     "bittrex": {
       "schema": {
         "database": "bittrex",
+        "market_histories_measurement": "market_histories",
         "book_orders_measurement": "book_orders",
         "market_summaries_measurement": "market_summaries"
       },
       "market_summaries_check_period_sec": 15,
       "markets_check_period_min": 5,
+      "market_histories_check_period_sec": 30,
       "order_books_check_period_sec": 15,
       "flush_batchs_period_sec": 1,
       "flush_capacity": 2000,

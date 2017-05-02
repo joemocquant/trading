@@ -19,6 +19,7 @@ var (
 	dbClient      *influxDBClient.Client
 	publicClient  *publicapi.Client
 	am            *allMarkets
+	lt            *lastTrades
 	batchsToWrite chan *ingestion.BatchPoints
 )
 
@@ -34,6 +35,7 @@ type bittrexConf struct {
 	Schema                        map[string]string `json:"schema"`
 	MarketSummariesCheckPeriodSec int               `json:"market_summaries_check_period_sec"`
 	MarketsCheckPeriodMin         int               `json:"markets_check_period_min"`
+	MarketHistoriesCheckPeriodSec int               `json:"market_histories_check_period_sec"`
 	OrderBooksCheckPeriodSec      int               `json:"order_books_check_period_sec"`
 	FlushBatchsPeriodSec          int               `json:"flush_batchs_period_sec"`
 	FlushCapacity                 int               `json:"flush_capacity"`
@@ -43,6 +45,11 @@ type bittrexConf struct {
 type allMarkets struct {
 	sync.Mutex
 	markets map[string]*publicapi.Market
+}
+
+type lastTrades struct {
+	sync.Mutex
+	lastTrades map[string]*publicapi.Trade
 }
 
 func init() {
@@ -87,7 +94,10 @@ func init() {
 	}
 
 	publicClient = publicapi.NewClient()
+
 	am = &allMarkets{sync.Mutex{}, make(map[string]*publicapi.Market)}
+	lt = &lastTrades{sync.Mutex{}, make(map[string]*publicapi.Trade)}
+
 	batchsToWrite = make(chan *ingestion.BatchPoints, conf.FlushCapacity)
 }
 
@@ -106,6 +116,9 @@ func Ingest() {
 
 	// ingest market summaries periodically
 	go ingestMarketSummaries()
+
+	// checking market histories periodically
+	go ingestMarketHistories()
 
 	// checking order books periodically
 	go ingestOrderBooks()

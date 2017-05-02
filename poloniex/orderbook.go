@@ -40,13 +40,13 @@ func prepareOrderBookPoints(currencyPair string, orderBook *publicapi.OrderBook,
 	processOrderBookPoints :=
 		func(currencyPair, typeOrder string, orders []*publicapi.Order, sequence int64) {
 
-			for _, order := range orders {
+			tags := map[string]string{
+				"source":     "publicapi",
+				"order_type": typeOrder,
+				"market":     currencyPair,
+			}
 
-				tags := map[string]string{
-					"source":     "publicapi",
-					"order_type": typeOrder,
-					"market":     currencyPair,
-				}
+			for _, order := range orders {
 
 				fields := map[string]interface{}{
 					"sequence": sequence,

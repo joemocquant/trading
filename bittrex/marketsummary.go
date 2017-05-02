@@ -46,7 +46,6 @@ func prepareMarketSummaryPoint(ms *publicapi.MarketSummary) (*influxDBClient.Poi
 	}
 
 	fields := map[string]interface{}{
-		"market_name":      ms.MarketName,
 		"high":             ms.High,
 		"low":              ms.Low,
 		"volume":           ms.Volume,
