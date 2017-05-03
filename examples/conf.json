@@ -22,6 +22,7 @@
       },
       "public_ticks_check_period_sec": 30,
       "market_check_period_min": 1,
+      "missing_trades_check_period_sec": 30,
       "order_books_check_period_sec": 30,
       "flush_batchs_period_ms": 1000,
       "flush_capacity": 2000,

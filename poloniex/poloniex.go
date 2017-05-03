@@ -3,6 +3,7 @@ package poloniex
 import (
 	"encoding/json"
 	"io/ioutil"
+	"sync"
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
@@ -14,13 +15,13 @@ import (
 )
 
 var (
-	conf           *configuration
-	logger         *logrus.Entry
-	dbClient       *influxDBClient.Client
-	publicClient   *publicapi.Client
-	pushClient     *pushapi.Client
-	marketUpdaters map[string]pushapi.MarketUpdater
-	batchsToWrite  chan *ingestion.BatchPoints
+	conf          *configuration
+	logger        *logrus.Entry
+	dbClient      *influxDBClient.Client
+	publicClient  *publicapi.Client
+	pushClient    *pushapi.Client
+	updaters      *marketUpdaters
+	batchsToWrite chan *ingestion.BatchPoints
 )
 
 type configuration struct {
@@ -32,13 +33,19 @@ type ingestionConf struct {
 }
 
 type poloniexConf struct {
-	Schema                    map[string]string `json:"schema"`
-	PublicTicksCheckPeriodSec int               `json:"public_ticks_check_period_sec"`
-	MarketCheckPeriodMin      int               `json:"market_check_period_min"`
-	OrderBooksCheckPeriodSec  int               `json:"order_books_check_period_sec"`
-	FlushBatchsPeriodMs       int               `json:"flush_batchs_period_ms"`
-	FlushCapacity             int               `json:"flush_capacity"`
-	LogLevel                  string            `json:"log_level"`
+	Schema                      map[string]string `json:"schema"`
+	PublicTicksCheckPeriodSec   int               `json:"public_ticks_check_period_sec"`
+	MarketCheckPeriodMin        int               `json:"market_check_period_min"`
+	MissingTradesCheckPeriodSec int               `json:"missing_trades_check_period_sec"`
+	OrderBooksCheckPeriodSec    int               `json:"order_books_check_period_sec"`
+	FlushBatchsPeriodMs         int               `json:"flush_batchs_period_ms"`
+	FlushCapacity               int               `json:"flush_capacity"`
+	LogLevel                    string            `json:"log_level"`
+}
+
+type marketUpdaters struct {
+	sync.RWMutex
+	mus map[string]pushapi.MarketUpdater
 }
 
 func init() {
@@ -89,7 +96,7 @@ func init() {
 		logger.WithField("error", err).Fatal("pushapi.NewPushClient")
 	}
 
-	marketUpdaters = make(map[string]pushapi.MarketUpdater)
+	updaters = &marketUpdaters{sync.RWMutex{}, make(map[string]pushapi.MarketUpdater)}
 	batchsToWrite = make(chan *ingestion.BatchPoints, conf.FlushCapacity)
 }
 
@@ -103,23 +110,21 @@ func Ingest() {
 		dbClient,
 	})
 
-	//-- Ticks
+	//-- Ticks (publicapi and pushapi)
 
 	// Ingest ticks
 	go ingestTicks()
 
-	//-- OrderBooks
+	//-- Markets
+
+	// Ingest markets (pushapi)
+	go ingestMarkets()
+
+	// Ingest missing trades (publicapi)
+	go ingestMissingTrades()
+
+	//-- OrderBooks (publicapi)
 
 	// Init and checking order books periodically
 	go ingestOrderBooks(100000, time.Duration(conf.OrderBooksCheckPeriodSec)*time.Second)
-
-	//-- Market
-
-	// Ingest and checking new markets periodically
-	go func() {
-		for {
-			ingestNewMarkets()
-			<-time.After(time.Duration(conf.MarketCheckPeriodMin) * time.Minute)
-		}
-	}()
 }

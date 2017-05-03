@@ -112,6 +112,26 @@ func NewdbClient() (*influxDBClient.Client, error) {
 	return &dbClient, nil
 }
 
+func QueryDB(dbClient *influxDBClient.Client, cmd, db string) ([]influxDBClient.Result, error) {
+
+	q := influxDBClient.Query{
+		Command:  cmd,
+		Database: db,
+	}
+
+	if response, err := (*dbClient).Query(q); err != nil {
+		return nil, err
+
+	} else {
+
+		if response.Error() != nil {
+			return nil, response.Error()
+		}
+
+		return response.Results, nil
+	}
+}
+
 func FlushEvery(period time.Duration, fi *FlushInfo) {
 
 	for {
@@ -163,11 +183,26 @@ func flushBatchs(fi *FlushInfo, count int) {
 
 func flushPoloniexDebug(batchPointsArr []*BatchPoints) {
 
-	orderBookBatchCount, orderBookLastCheckBatchCount, marketBatchCount, tickBatchCount := 0, 0, 0, 0
-	orderBookPointCount, orderBookLastCheckPointCount, marketPointCount, tickPointCount := 0, 0, 0, 0
+	tickBatchCount, tickPointCount := 0, 0
+	marketBatchCount, marketPointCount := 0, 0
+	missingTradeBatchCount, missingTradePointCount := 0, 0
+	orderBookBatchCount, orderBookPointCount := 0, 0
+	orderBookLastCheckBatchCount, orderBookLastCheckPointCount := 0, 0
 
 	for _, batchPoints := range batchPointsArr {
 		switch batchPoints.TypePoint {
+
+		case "tick":
+			tickBatchCount++
+			tickPointCount += len(batchPoints.Points)
+
+		case "market":
+			marketBatchCount++
+			marketPointCount += len(batchPoints.Points)
+
+		case "missingTrade":
+			missingTradeBatchCount++
+			missingTradePointCount += len(batchPoints.Points)
 
 		case "orderBook":
 			orderBookBatchCount++
@@ -176,19 +211,28 @@ func flushPoloniexDebug(batchPointsArr []*BatchPoints) {
 		case "orderBookLastCheck":
 			orderBookLastCheckBatchCount++
 			orderBookLastCheckPointCount += len(batchPoints.Points)
-		case "market":
-			marketBatchCount++
-			marketPointCount += len(batchPoints.Points)
 
-		case "tick":
-			tickBatchCount++
-			tickPointCount += len(batchPoints.Points)
 		}
 	}
 
 	toPrint := fmt.Sprintf("[Poloniex flush]: %d batchs (%d points)",
-		orderBookBatchCount+orderBookLastCheckBatchCount+marketBatchCount+tickBatchCount,
-		orderBookPointCount+orderBookLastCheckPointCount+marketPointCount+tickPointCount)
+		tickBatchCount+marketBatchCount+missingTradeBatchCount+orderBookBatchCount+orderBookLastCheckBatchCount,
+		tickPointCount+marketPointCount+missingTradePointCount+orderBookPointCount+orderBookLastCheckPointCount)
+
+	if tickBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d ticks (%d)",
+			tickBatchCount, tickPointCount)
+	}
+
+	if marketBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d markets (%d)",
+			marketBatchCount, marketPointCount)
+	}
+
+	if missingTradeBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d missingTrades (%d)",
+			missingTradeBatchCount, missingTradePointCount)
+	}
 
 	if orderBookBatchCount > 0 {
 		toPrint += fmt.Sprintf(" %d orderBooks (%d)",
@@ -198,16 +242,6 @@ func flushPoloniexDebug(batchPointsArr []*BatchPoints) {
 	if orderBookLastCheckBatchCount > 0 {
 		toPrint += fmt.Sprintf(" %d orderBookLastChecks (%d)",
 			orderBookLastCheckBatchCount, orderBookLastCheckPointCount)
-	}
-
-	if marketBatchCount > 0 {
-		toPrint += fmt.Sprintf(" %d markets (%d)",
-			marketBatchCount, marketPointCount)
-	}
-
-	if tickBatchCount > 0 {
-		toPrint += fmt.Sprintf(" %d ticks (%d)",
-			tickBatchCount, tickPointCount)
 	}
 
 	logger.Debug(toPrint)

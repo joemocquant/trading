@@ -9,6 +9,15 @@ import (
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
 )
 
+func ingestMarkets() {
+
+	// checking new markets periodically
+	for {
+		ingestNewMarkets()
+		<-time.After(time.Duration(conf.MarketCheckPeriodMin) * time.Minute)
+	}
+}
+
 func ingestNewMarkets() {
 
 	tickers, err := publicClient.GetTickers()
@@ -19,14 +28,15 @@ func ingestNewMarkets() {
 		tickers, err = publicClient.GetTickers()
 	}
 
-	// Might need to filter out frozen markets
-
 	newMarkets := make([]string, 0, len(tickers))
+
+	updaters.RLock()
 	for currencyPair, _ := range tickers {
-		if _, ok := marketUpdaters[currencyPair]; !ok {
+		if _, ok := updaters.mus[currencyPair]; !ok {
 			newMarkets = append(newMarkets, currencyPair)
 		}
 	}
+	updaters.RUnlock()
 
 	if len(newMarkets) > 0 {
 		logger.WithField("newMarkets", newMarkets).Infof("Ingesting %d new markets", len(newMarkets))
@@ -45,7 +55,10 @@ func ingestNewMarkets() {
 			continue
 		}
 
-		marketUpdaters[currencyPair] = marketUpdater
+		updaters.Lock()
+		updaters.mus[currencyPair] = marketUpdater
+		updaters.Unlock()
+
 		go getMarketNewPoints(marketUpdater, currencyPair)
 	}
 }
@@ -131,13 +144,13 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		}
 		fields = map[string]interface{}{
 			"sequence": sequence,
+			"trade_id": nt.TradeId,
 			"rate":     nt.Rate,
 			"amount":   nt.Amount,
+			"total":    nt.Total,
 		}
 		measurement = conf.Schema["trade_updates_measurement"]
-
-		nano := time.Now().UnixNano() % int64(time.Second)
-		timestamp = time.Unix(nt.Date, nano)
+		timestamp = time.Unix(nt.Date, nt.TradeId%1000000000)
 	}
 
 	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
