@@ -130,7 +130,7 @@ func prepareMissingTradePoints(currencyPair string, mt []*publicapi.Trade) {
 		fields := map[string]interface{}{
 			"trade_id": trade.TradeId,
 			"rate":     trade.Rate,
-			"amount":   trade.Amount,
+			"quantity": trade.Amount,
 			"total":    trade.Total,
 		}
 

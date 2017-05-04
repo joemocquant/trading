@@ -111,7 +111,8 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		fields = map[string]interface{}{
 			"sequence": sequence,
 			"rate":     obm.Rate,
-			"amount":   obm.Amount,
+			"quantity": obm.Amount,
+			"total":    obm.Rate * obm.Amount,
 		}
 		measurement = conf.Schema["book_updates_measurement"]
 		timestamp = time.Now()
@@ -128,7 +129,8 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		fields = map[string]interface{}{
 			"sequence": sequence,
 			"rate":     obr.Rate,
-			"amount":   0.0,
+			"quantity": 0.0,
+			"total":    0.0,
 		}
 		measurement = conf.Schema["book_updates_measurement"]
 		timestamp = time.Now()
@@ -146,7 +148,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 			"sequence": sequence,
 			"trade_id": nt.TradeId,
 			"rate":     nt.Rate,
-			"amount":   nt.Amount,
+			"quantity": nt.Amount,
 			"total":    nt.Total,
 		}
 		measurement = conf.Schema["trade_updates_measurement"]

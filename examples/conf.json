@@ -25,7 +25,7 @@
       "missing_trades_check_period_sec": 30,
       "order_books_check_period_sec": 30,
       "flush_batchs_period_ms": 1000,
-      "flush_capacity": 2000,
+      "flush_capacity": 5000,
       "log_level": "debug"
     },
 
@@ -41,7 +41,7 @@
       "market_histories_check_period_sec": 30,
       "order_books_check_period_sec": 15,
       "flush_batchs_period_sec": 1,
-      "flush_capacity": 2000,
+      "flush_capacity": 5000,
       "log_level": "debug"
     },
 

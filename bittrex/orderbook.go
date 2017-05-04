@@ -52,11 +52,16 @@ func prepareOrderBookPoints(marketName string, orderBook *publicapi.OrderBook) {
 			"market":     marketName,
 		}
 
+		cumulativeSum := 0.0
 		for _, order := range orders {
 
+			cumulativeSum += order.Rate * order.Quantity
+
 			fields := map[string]interface{}{
-				"rate":   order.Rate,
-				"amount": order.Quantity,
+				"rate":           order.Rate,
+				"quantity":       order.Quantity,
+				"total":          order.Rate * order.Quantity,
+				"cumulative_sum": cumulativeSum,
 			}
 
 			timestamp := time.Unix(int64(baseTimestamp), int64(index))
