@@ -1,15 +1,17 @@
 {
+  "influxdb": {
+    "host": "https://localhost:8086",
+    "auth": {
+      "username": "ingest",
+      "password": "ingestpass"
+    },
+    "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
+    "log_level": "debug"
+  },
+
   "ingestion": {
 
-    "influxdb": {
-      "host": "https://localhost:8086",
-      "auth": {
-        "username": "ingest",
-        "password": "ingestpass"
-      },
-      "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
-      "log_level": "debug"
-    },
+    "log_level": "debug",
 
     "poloniex": {
       "schema": {
@@ -25,8 +27,7 @@
       "missing_trades_check_period_sec": 30,
       "order_books_check_period_sec": 30,
       "flush_batchs_period_ms": 1000,
-      "flush_capacity": 5000,
-      "log_level": "debug"
+      "flush_capacity": 5000
     },
 
     "bittrex": {
@@ -41,8 +42,7 @@
       "market_histories_check_period_sec": 30,
       "order_books_check_period_sec": 15,
       "flush_batchs_period_sec": 1,
-      "flush_capacity": 5000,
-      "log_level": "debug"
+      "flush_capacity": 5000
     },
 
     "coinmarketcap": {
@@ -52,8 +52,7 @@
         "global_data_measurement": "global_data"
       },
       "ticks_check_period_min": 5,
-      "global_data_check_period_min": 5,
-      "log_level": "debug"
+      "global_data_check_period_min": 5
     }
   },
 

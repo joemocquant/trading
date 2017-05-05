@@ -70,7 +70,7 @@ func flushGlobalDataPoint(point *influxDBClient.Point) {
 
 	bp.AddPoint(point)
 
-	if err := (*dbClient).Write(bp); err != nil {
+	if err := dbClient.Write(bp); err != nil {
 		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,

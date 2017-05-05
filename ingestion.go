@@ -1,8 +1,6 @@
 package ingestion
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,9 +12,8 @@ import (
 )
 
 var (
-	conf      *configuration
-	logger    *logrus.Entry
-	tlsConfig *tls.Config
+	conf   *configuration
+	logger *logrus.Entry
 )
 
 type configuration struct {
@@ -24,20 +21,13 @@ type configuration struct {
 }
 
 type ingestionConf struct {
-	influxdbConf `json:"influxdb"`
-}
-
-type influxdbConf struct {
-	Host               string            `json:"host"`
-	Auth               map[string]string `json:"auth"`
-	TlsCertificatePath string            `json:"tls_certificate_path"`
-	LogLevel           string            `json:"log_level"`
+	LogLevel string `json:"log_level"`
 }
 
 type FlushInfo struct {
 	BatchsToWrite <-chan *BatchPoints
 	Database      string
-	DbClient      *influxDBClient.Client
+	DbClient      influxDBClient.Client
 }
 
 type BatchPoints struct {
@@ -81,55 +71,6 @@ func init() {
 	default:
 		logrus.SetLevel(logrus.WarnLevel)
 	}
-
-	tlsConfig = &tls.Config{RootCAs: x509.NewCertPool()}
-	certPath := conf.TlsCertificatePath
-
-	if crt, err := ioutil.ReadFile(certPath); err != nil {
-		logger.WithField("error", err).Fatal("reading certificate")
-
-	} else {
-
-		if ok := tlsConfig.RootCAs.AppendCertsFromPEM(crt); !ok {
-			logger.Fatal("cannot append certificate")
-		}
-	}
-}
-
-func NewdbClient() (*influxDBClient.Client, error) {
-
-	dbClient, err := influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
-		Addr:      conf.Host,
-		Username:  conf.Auth["username"],
-		Password:  conf.Auth["password"],
-		TLSConfig: tlsConfig,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &dbClient, nil
-}
-
-func QueryDB(dbClient *influxDBClient.Client, cmd, db string) ([]influxDBClient.Result, error) {
-
-	q := influxDBClient.Query{
-		Command:  cmd,
-		Database: db,
-	}
-
-	if response, err := (*dbClient).Query(q); err != nil {
-		return nil, err
-
-	} else {
-
-		if response.Error() != nil {
-			return nil, response.Error()
-		}
-
-		return response.Results, nil
-	}
 }
 
 func FlushEvery(period time.Duration, fi *FlushInfo) {
@@ -164,7 +105,7 @@ func flushBatchs(fi *FlushInfo, count int) {
 		bp.AddPoints(batchPoints.Points)
 	}
 
-	if err := (*fi.DbClient).Write(bp); err != nil {
+	if err := fi.DbClient.Write(bp); err != nil {
 		logger.WithFields(logrus.Fields{
 			"batchPoints": bp,
 			"error":       err,

@@ -7,6 +7,7 @@ import (
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
+	"trading/database"
 	"trading/ingestion"
 
 	"github.com/Sirupsen/logrus"
@@ -17,7 +18,7 @@ import (
 var (
 	conf          *configuration
 	logger        *logrus.Entry
-	dbClient      *influxDBClient.Client
+	dbClient      influxDBClient.Client
 	publicClient  *publicapi.Client
 	pushClient    *pushapi.Client
 	updaters      *marketUpdaters
@@ -29,6 +30,7 @@ type configuration struct {
 }
 
 type ingestionConf struct {
+	LogLevel     string `json:"log_level"`
 	poloniexConf `json:"poloniex"`
 }
 
@@ -40,7 +42,6 @@ type poloniexConf struct {
 	OrderBooksCheckPeriodSec    int               `json:"order_books_check_period_sec"`
 	FlushBatchsPeriodMs         int               `json:"flush_batchs_period_ms"`
 	FlushCapacity               int               `json:"flush_capacity"`
-	LogLevel                    string            `json:"log_level"`
 }
 
 type marketUpdaters struct {
@@ -85,8 +86,8 @@ func init() {
 		logrus.SetLevel(logrus.WarnLevel)
 	}
 
-	if dbClient, err = ingestion.NewdbClient(); err != nil {
-		logger.WithField("error", err).Fatal("ingestion.NewdbClient")
+	if dbClient, err = database.NewdbClient(); err != nil {
+		logger.WithField("error", err).Fatal("database.NewdbClient")
 	}
 
 	publicClient = publicapi.NewClient()

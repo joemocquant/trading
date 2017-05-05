@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"trading/api/bittrex/publicapi"
+	"trading/database"
 	"trading/ingestion"
 
 	"github.com/Sirupsen/logrus"
@@ -16,7 +17,7 @@ import (
 var (
 	conf          *configuration
 	logger        *logrus.Entry
-	dbClient      *influxDBClient.Client
+	dbClient      influxDBClient.Client
 	publicClient  *publicapi.Client
 	am            *allMarkets
 	lt            *lastTrades
@@ -28,6 +29,7 @@ type configuration struct {
 }
 
 type ingestionConf struct {
+	LogLevel    string `json:"log_level"`
 	bittrexConf `json:"bittrex"`
 }
 
@@ -39,7 +41,6 @@ type bittrexConf struct {
 	OrderBooksCheckPeriodSec      int               `json:"order_books_check_period_sec"`
 	FlushBatchsPeriodSec          int               `json:"flush_batchs_period_sec"`
 	FlushCapacity                 int               `json:"flush_capacity"`
-	LogLevel                      string            `json:"log_level"`
 }
 
 type allMarkets struct {
@@ -89,8 +90,8 @@ func init() {
 		logrus.SetLevel(logrus.WarnLevel)
 	}
 
-	if dbClient, err = ingestion.NewdbClient(); err != nil {
-		logger.WithField("error", err).Fatal("ingestion.NewdbClient")
+	if dbClient, err = database.NewdbClient(); err != nil {
+		logger.WithField("error", err).Fatal("database.NewdbClient")
 	}
 
 	publicClient = publicapi.NewClient()

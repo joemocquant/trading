@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"trading/api/coinmarketcap"
-	"trading/ingestion"
+	"trading/database"
 
 	"github.com/Sirupsen/logrus"
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
@@ -14,7 +14,7 @@ import (
 var (
 	conf                *configuration
 	logger              *logrus.Entry
-	dbClient            *influxDBClient.Client
+	dbClient            influxDBClient.Client
 	coinmarketcapClient *coinmarketcap.Client
 )
 
@@ -23,6 +23,7 @@ type configuration struct {
 }
 
 type ingestionConf struct {
+	LogLevel          string `json:"log_level"`
 	coinmarketcapConf `json:"coinmarketcap"`
 }
 
@@ -30,7 +31,6 @@ type coinmarketcapConf struct {
 	Schema                   map[string]string `json:"schema"`
 	TicksCheckPeriodMin      int               `json:"ticks_check_period_min"`
 	GlobalDataCheckPeriodMin int               `json:"global_data_check_period_min"`
-	LogLevel                 string            `json:"log_level"`
 }
 
 func init() {
@@ -70,8 +70,8 @@ func init() {
 		logrus.SetLevel(logrus.WarnLevel)
 	}
 
-	if dbClient, err = ingestion.NewdbClient(); err != nil {
-		logger.WithField("error", err).Fatal("ingestion.NewdbClient")
+	if dbClient, err = database.NewdbClient(); err != nil {
+		logger.WithField("error", err).Fatal("database.NewdbClient")
 	}
 
 	coinmarketcapClient = coinmarketcap.NewClient()

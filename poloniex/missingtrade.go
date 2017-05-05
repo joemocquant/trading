@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 	"trading/api/poloniex/publicapi"
+	"trading/database"
 	"trading/ingestion"
 
 	influxDBClient "github.com/influxdata/influxdb/client/v2"
@@ -20,9 +21,11 @@ func ingestMissingTrades() {
 		start := end.Add(-2 * period)
 
 		go func(start, end time.Time) {
+
 			res := getLastIngestedTrades(start, end)
 			missingTradeIds := getMissingTradeIds(res)
 			updateMissingTrades(missingTradeIds, start, end)
+
 		}(start, end)
 
 		<-time.After(period)
@@ -32,25 +35,25 @@ func ingestMissingTrades() {
 func getLastIngestedTrades(start, end time.Time) []influxDBClient.Result {
 
 	cmd := fmt.Sprintf(
-		"SELECT trade_id FROM trade_updates WHERE time >= %d and time < %d GROUP BY market",
-		start.UnixNano(), end.UnixNano())
+		"SELECT trade_id FROM %s WHERE time >= %d and time < %d GROUP BY market",
+		conf.Schema["trade_updates_measurement"], start.UnixNano(), end.UnixNano())
 
-	res, err := ingestion.QueryDB(dbClient, cmd, conf.Schema["database"])
+	res, err := database.QueryDB(dbClient, cmd, conf.Schema["database"])
 
 	for err != nil {
-		logger.WithField("error", err).Error("getLastTrades: ingestion.QueryDB")
+		logger.WithField("error", err).Error("getLastTrades: database.QueryDB")
 		time.Sleep(5 * time.Second)
-		res, err = ingestion.QueryDB(dbClient, cmd, conf.Schema["database"])
+		res, err = database.QueryDB(dbClient, cmd, conf.Schema["database"])
 	}
 
 	return res
 }
 
-func getMissingTradeIds(res []influxDBClient.Result) map[string]map[int64]struct{} {
+func getMissingTradeIds(trades []influxDBClient.Result) map[string]map[int64]struct{} {
 
 	missingTradeIds := make(map[string]map[int64]struct{})
 
-	for _, serie := range res[0].Series {
+	for _, serie := range trades[0].Series {
 
 		currencyPair := serie.Tags["market"]
 		var prevId int64 = 0
