@@ -1,0 +1,46 @@
+{
+  "influxdb": {
+    "host": "https://localhost:8086",
+    "auth": {
+      "username": "metrics",
+      "password": "metricspass"
+    },
+    "tls_certificate_path": "/etc/ssl/influxdb-selfsigned-cert.pem",
+    "log_level": "debug"
+  },
+
+  "metrics": {
+
+    "log_level": "debug",
+
+    "market_depth_intervals":[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,  11,
+      12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+      27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40],
+
+    "flush_batchs_period_ms": 1000,
+    "flush_capacity": 5000,
+
+    "schema": {
+      "database": "metrics",
+      "market_depths_measurement": "market_depths"
+    },
+
+    "poloniex": {
+      "schema": {
+        "database": "poloniex",
+        "book_orders_measurement": "book_orders",
+        "book_orders_last_check_measurement": "book_orders_last_check"
+      },
+      "market_depth_period_check_sec": 10
+    },
+
+    "bittrex": {
+      "schema": {
+        "database": "bittrex",
+        "book_orders_measurement": "book_orders",
+        "book_orders_last_check_measurement": "book_orders_last_check"
+      },
+      "market_depth_period_check_sec": 10
+    }
+  }
+}
