@@ -3,10 +3,10 @@ package poloniex
 import (
 	"time"
 	"trading/api/poloniex/pushapi"
-	"trading/ingestion"
+	"trading/database"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestMarkets() {
@@ -23,7 +23,9 @@ func ingestNewMarkets() {
 	tickers, err := publicClient.GetTickers()
 
 	for err != nil {
-		logger.WithField("error", err).Error("ingestNewMarkets: publicClient.GetTickers")
+		logger.WithField("error", err).Error(
+			"ingestNewMarkets: publicClient.GetTickers")
+
 		time.Sleep(5 * time.Second)
 		tickers, err = publicClient.GetTickers()
 	}
@@ -31,58 +33,62 @@ func ingestNewMarkets() {
 	newMarkets := make([]string, 0, len(tickers))
 
 	updaters.RLock()
-	for currencyPair, _ := range tickers {
-		if _, ok := updaters.mus[currencyPair]; !ok {
-			newMarkets = append(newMarkets, currencyPair)
+	for market, _ := range tickers {
+		if _, ok := updaters.mus[market]; !ok {
+			newMarkets = append(newMarkets, market)
 		}
 	}
 	updaters.RUnlock()
 
 	if len(newMarkets) > 0 {
-		logger.WithField("newMarkets", newMarkets).Infof("Ingesting %d new markets", len(newMarkets))
+		logger.WithField("newMarkets", newMarkets).Infof(
+			"Ingesting %d new markets", len(newMarkets))
 	}
 
-	for _, currencyPair := range newMarkets {
+	for _, market := range newMarkets {
 
-		marketUpdater, err := pushClient.SubscribeMarket(currencyPair)
+		marketUpdater, err := pushClient.SubscribeMarket(market)
 
 		if err != nil {
 
 			logger.WithFields(logrus.Fields{
-				"currencyPair": currencyPair,
-				"error":        err,
+				"market": market,
+				"error":  err,
 			}).Error("ingestNewMarkets: pushClient.SubscribeMarket")
 			continue
 		}
 
 		updaters.Lock()
-		updaters.mus[currencyPair] = marketUpdater
+		updaters.mus[market] = marketUpdater
 		updaters.Unlock()
 
-		go getMarketNewPoints(marketUpdater, currencyPair)
+		go getMarketNewPoints(marketUpdater, market)
 	}
 }
 
-func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string) {
+func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, market string) {
 
 	for {
 		marketUpdates := <-marketUpdater
 
 		go func(marketUpdates *pushapi.MarketUpdates) {
 
-			points := make([]*influxDBClient.Point, 0, len(marketUpdates.Updates))
+			points := make([]*ifxClient.Point, 0, len(marketUpdates.Updates))
 
 			for _, marketUpdate := range marketUpdates.Updates {
 
-				pt, err := prepareMarketPoint(marketUpdate, currencyPair, marketUpdates.Sequence)
+				pt, err := prepareMarketPoint(
+					marketUpdate, market, marketUpdates.Sequence)
+
 				if err != nil {
-					logger.WithField("error", err).Error("getMarketNewPoints: prepareMarketPoint")
+					logger.WithField("error", err).Error(
+						"getMarketNewPoints: prepareMarketPoint")
 					continue
 				}
 
 				points = append(points, pt)
 			}
-			batchsToWrite <- &ingestion.BatchPoints{"market", points}
+			batchsToWrite <- &database.BatchPoints{"market", points}
 
 		}(marketUpdates)
 
@@ -90,7 +96,7 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, currencyPair string
 }
 
 func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
-	currencyPair string, sequence int64) (*influxDBClient.Point, error) {
+	market string, sequence int64) (*ifxClient.Point, error) {
 
 	tags := make(map[string]string, 3)
 	fields := make(map[string]interface{}, 3)
@@ -106,7 +112,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		tags = map[string]string{
 			"source":     "pushapi",
 			"order_type": obm.TypeOrder,
-			"market":     currencyPair,
+			"market":     market,
 		}
 		fields = map[string]interface{}{
 			"sequence": sequence,
@@ -124,7 +130,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		tags = map[string]string{
 			"source":     "pushapi",
 			"order_type": obr.TypeOrder,
-			"market":     currencyPair,
+			"market":     market,
 		}
 		fields = map[string]interface{}{
 			"sequence": sequence,
@@ -142,7 +148,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		tags = map[string]string{
 			"source":     "pushapi",
 			"order_type": nt.TypeOrder,
-			"market":     currencyPair,
+			"market":     market,
 		}
 		fields = map[string]interface{}{
 			"sequence": sequence,
@@ -155,7 +161,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 		timestamp = time.Unix(nt.Date, nt.TradeId%1000000000)
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+	pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}

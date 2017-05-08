@@ -4,9 +4,9 @@ import (
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
-	"trading/ingestion"
+	"trading/database"
 
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestTicks() {
@@ -24,32 +24,41 @@ func ingestPublicTicks() {
 	ticks, err := publicClient.GetTickers()
 
 	for err != nil {
-		logger.WithField("error", err).Error("ingestPublicTicks: publicClient.GetTickers")
+
+		logger.WithField("error", err).Error(
+			"ingestPublicTicks: publicClient.GetTickers")
+
 		time.Sleep(5 * time.Second)
 		ticks, err = publicClient.GetTickers()
 	}
 
-	points := make([]*influxDBClient.Point, 0, len(ticks))
-	for currencyPair, tick := range ticks {
-		pt, err := preparePublicTickPoint(currencyPair, tick)
+	points := make([]*ifxClient.Point, 0, len(ticks))
+
+	for market, tick := range ticks {
+
+		pt, err := preparePublicTickPoint(market, tick)
+
 		if err != nil {
-			logger.WithField("error", err).Error("ingestPublicTicks: preparePublicTickPoint")
+			logger.WithField("error", err).Error(
+				"ingestPublicTicks: preparePublicTickPoint")
 			continue
 		}
+
 		points = append(points, pt)
 	}
 
-	batchsToWrite <- &ingestion.BatchPoints{"tick", points}
+	batchsToWrite <- &database.BatchPoints{"tick", points}
 }
 
-func preparePublicTickPoint(currencyPair string, tick *publicapi.Tick) (*influxDBClient.Point, error) {
+func preparePublicTickPoint(market string,
+	tick *publicapi.Tick) (*ifxClient.Point, error) {
 
 	measurement := conf.Schema["ticks_measurement"]
 	timestamp := time.Now()
 
 	tags := map[string]string{
 		"source": "publicapi",
-		"market": currencyPair,
+		"market": market,
 	}
 
 	fields := map[string]interface{}{
@@ -64,7 +73,7 @@ func preparePublicTickPoint(currencyPair string, tick *publicapi.Tick) (*influxD
 		"low_24hr":       tick.Low24hr,
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+	pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +85,8 @@ func ingestPushTicks() {
 	ticker, err := pushClient.SubscribeTicker()
 
 	for err != nil {
-		logger.WithField("error", err).Error("ingestPushTicks: pushClient.SubscribeTicker")
+		logger.WithField("error", err).Error(
+			"ingestPushTicks: pushClient.SubscribeTicker")
 		time.Sleep(5 * time.Second)
 		ticker, err = pushClient.SubscribeTicker()
 	}
@@ -88,12 +98,14 @@ func ingestPushTicks() {
 
 			pt, err := preparePushTickPoint(tick)
 			if err != nil {
-				logger.WithField("error", err).Error("ingestPushTicks: poloniex.prepareTickPoint")
+				logger.WithField("error", err).Error(
+					"ingestPushTicks: poloniex.prepareTickPoint")
 				return
 			}
-			batchsToWrite <- &ingestion.BatchPoints{
+
+			batchsToWrite <- &database.BatchPoints{
 				"tick",
-				[]*influxDBClient.Point{pt},
+				[]*ifxClient.Point{pt},
 			}
 
 		}(tick)
@@ -101,7 +113,7 @@ func ingestPushTicks() {
 	}
 }
 
-func preparePushTickPoint(tick *pushapi.Tick) (*influxDBClient.Point, error) {
+func preparePushTickPoint(tick *pushapi.Tick) (*ifxClient.Point, error) {
 
 	measurement := conf.Schema["ticks_measurement"]
 	timestamp := time.Now()
@@ -123,7 +135,7 @@ func preparePushTickPoint(tick *pushapi.Tick) (*influxDBClient.Point, error) {
 		"low_24hr":       tick.Low24hr,
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+	pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}

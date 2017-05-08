@@ -3,53 +3,57 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/ingestion"
+	"trading/database"
 
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestOrderBooks() {
 
 	for {
 
-		markets := getActiveMarkets()
+		markets := getActiveMarketNames()
 
-		for _, marketName := range markets {
-			go ingestOrderBook(marketName)
+		for _, market := range markets {
+			go ingestOrderBook(market)
 		}
 
 		<-time.After(time.Duration(conf.OrderBooksCheckPeriodSec) * time.Second)
 	}
 }
 
-func ingestOrderBook(marketName string) {
+func ingestOrderBook(market string) {
 
-	orderBook, err := publicClient.GetOrderBook(marketName, "both")
+	orderBook, err := publicClient.GetOrderBook(market, "both")
 
 	for err != nil {
-		logger.WithField("error", err).Error("ingestOrderBook: publicClient.GetOrderBook")
+		logger.WithField("error", err).Error(
+			"ingestOrderBook: publicClient.GetOrderBook")
+
 		time.Sleep(5 * time.Second)
-		orderBook, err = publicClient.GetOrderBook(marketName, "both")
+		orderBook, err = publicClient.GetOrderBook(market, "both")
 	}
 
-	prepareOrderBookPoints(marketName, orderBook)
+	baseTimestamp := time.Now().Unix()
+	prepareOrderBookPoints(market, orderBook, baseTimestamp)
+	prepareLastOrderBookCheckPoint(market, orderBook, baseTimestamp)
 }
 
-func prepareOrderBookPoints(marketName string, orderBook *publicapi.OrderBook) {
+func prepareOrderBookPoints(market string, orderBook *publicapi.OrderBook,
+	baseTimestamp int64) {
 
 	measurement := conf.Schema["book_orders_measurement"]
-	baseTimestamp := time.Now().Unix()
 	index := 0
 
 	size := len(orderBook.Sell) + len(orderBook.Buy)
-	points := make([]*influxDBClient.Point, 0, size)
+	points := make([]*ifxClient.Point, 0, size)
 
-	processOrderBookPoints := func(currencyPair, typeOrder string, orders []*publicapi.Order) {
+	processOrderBookPoints := func(typeOrder string, orders []*publicapi.Order) {
 
 		tags := map[string]string{
 			"source":     "publicapi",
 			"order_type": typeOrder,
-			"market":     marketName,
+			"market":     market,
 		}
 
 		cumulativeSum := 0.0
@@ -67,16 +71,45 @@ func prepareOrderBookPoints(marketName string, orderBook *publicapi.OrderBook) {
 			timestamp := time.Unix(int64(baseTimestamp), int64(index))
 			index++
 
-			pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+			pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 			if err != nil {
-				logger.WithField("error", err).Error("prepareOrderBookPoints: influxDBClient.NewPoint")
+				logger.WithField("error", err).Error(
+					"prepareOrderBookPoints: ifxClient.NewPoint")
 				continue
 			}
 			points = append(points, pt)
 		}
 	}
 
-	processOrderBookPoints(marketName, "sell", orderBook.Sell)
-	processOrderBookPoints(marketName, "buy", orderBook.Buy)
-	batchsToWrite <- &ingestion.BatchPoints{"orderBook", points}
+	processOrderBookPoints("ask", orderBook.Sell)
+	processOrderBookPoints("bid", orderBook.Buy)
+	batchsToWrite <- &database.BatchPoints{"orderBook", points}
+}
+
+func prepareLastOrderBookCheckPoint(market string,
+	orderBook *publicapi.OrderBook, baseTimestamp int64) {
+
+	measurement := conf.Schema["book_orders_last_check_measurement"]
+	timestamp := time.Unix(int64(baseTimestamp), 0)
+
+	tags := map[string]string{
+		"source": "publicapi",
+		"market": market,
+	}
+
+	fields := map[string]interface{}{
+		"bid_depth": len(orderBook.Buy),
+		"ask_depth": len(orderBook.Sell),
+	}
+
+	point, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
+	if err != nil {
+		logger.WithField("error", err).Error(
+			"prepareLastOrderBookCheckPoint: ifxClient.NewPoint")
+	}
+
+	batchsToWrite <- &database.BatchPoints{
+		"orderBookLastCheck",
+		[]*ifxClient.Point{point},
+	}
 }

@@ -3,39 +3,47 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/ingestion"
+	"trading/database"
 
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestMarketSummaries() {
+
+	period := time.Duration(conf.MarketSummariesCheckPeriodSec) * time.Second
 
 	for {
 		marketSummaries, err := publicClient.GetMarketSummaries()
 
 		for err != nil {
-			logger.WithField("error", err).Error("ingestMarketSummaries: publicClient.GetMarketSummaries")
+			logger.WithField("error", err).Error(
+				"ingestMarketSummaries: publicClient.GetMarketSummaries")
+
 			time.Sleep(5 * time.Second)
 			marketSummaries, err = publicClient.GetMarketSummaries()
 		}
 
-		points := make([]*influxDBClient.Point, 0, len(marketSummaries))
+		points := make([]*ifxClient.Point, 0, len(marketSummaries))
+
 		for _, marketSummary := range marketSummaries {
+
 			pt, err := prepareMarketSummaryPoint(marketSummary)
 			if err != nil {
-				logger.WithField("error", err).Error("ingestMarketSummaries: prepareMarketSummaryPoint")
+				logger.WithField("error", err).Error(
+					"ingestMarketSummaries: prepareMarketSummaryPoint")
 				continue
 			}
 			points = append(points, pt)
 		}
 
-		batchsToWrite <- &ingestion.BatchPoints{"marketSummary", points}
+		batchsToWrite <- &database.BatchPoints{"marketSummary", points}
 
-		<-time.After(time.Duration(conf.MarketSummariesCheckPeriodSec) * time.Second)
+		<-time.After(period)
 	}
 }
 
-func prepareMarketSummaryPoint(ms *publicapi.MarketSummary) (*influxDBClient.Point, error) {
+func prepareMarketSummaryPoint(
+	ms *publicapi.MarketSummary) (*ifxClient.Point, error) {
 
 	measurement := conf.Schema["market_summaries_measurement"]
 	timestamp := time.Unix(ms.TimeStamp, 0)
@@ -59,7 +67,7 @@ func prepareMarketSummaryPoint(ms *publicapi.MarketSummary) (*influxDBClient.Poi
 		"created":          ms.Created,
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+	pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}

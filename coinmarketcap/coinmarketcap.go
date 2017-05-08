@@ -7,14 +7,14 @@ import (
 	"trading/database"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 var (
 	conf                *configuration
 	logger              *logrus.Entry
-	dbClient            influxDBClient.Client
+	dbClient            ifxClient.Client
 	coinmarketcapClient *coinmarketcap.Client
 )
 

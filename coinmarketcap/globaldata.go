@@ -5,7 +5,7 @@ import (
 	"trading/api/coinmarketcap"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestGlobalData() {
@@ -14,14 +14,17 @@ func ingestGlobalData() {
 		globalData, err := coinmarketcapClient.GetGlobalData()
 
 		for err != nil {
-			logger.WithField("error", err).Error("ingestGlobalData: publicClient.GetGlobalData")
+			logger.WithField("error", err).Error(
+				"ingestGlobalData: publicClient.GetGlobalData")
+
 			time.Sleep(5 * time.Second)
 			globalData, err = coinmarketcapClient.GetGlobalData()
 		}
 
 		pt, err := prepareGlobalDataPoint(globalData)
 		if err != nil {
-			logger.WithField("error", err).Error("ingestGlobalData: prepareGlobalDataPoint")
+			logger.WithField("error", err).Error(
+				"ingestGlobalData: prepareGlobalDataPoint")
 			continue
 		}
 
@@ -31,7 +34,8 @@ func ingestGlobalData() {
 	}
 }
 
-func prepareGlobalDataPoint(gd *coinmarketcap.GlobalData) (*influxDBClient.Point, error) {
+func prepareGlobalDataPoint(
+	gd *coinmarketcap.GlobalData) (*ifxClient.Point, error) {
 
 	measurement := conf.Schema["global_data_measurement"]
 	timestamp := time.Now()
@@ -49,22 +53,23 @@ func prepareGlobalDataPoint(gd *coinmarketcap.GlobalData) (*influxDBClient.Point
 		"active_markets":                   gd.ActiveMarkets,
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+	pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}
 	return pt, nil
 }
 
-func flushGlobalDataPoint(point *influxDBClient.Point) {
+func flushGlobalDataPoint(point *ifxClient.Point) {
 
-	bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
+	bp, err := ifxClient.NewBatchPoints(ifxClient.BatchPointsConfig{
 		Database:  conf.Schema["database"],
 		Precision: "ns",
 	})
 
 	if err != nil {
-		logger.WithField("error", err).Error("flushGlobalDataPoint: dbClient.NewBatchPoints")
+		logger.WithField("error", err).Error(
+			"flushGlobalDataPoint: dbClient.NewBatchPoints")
 		return
 	}
 

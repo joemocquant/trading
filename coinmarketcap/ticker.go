@@ -5,7 +5,7 @@ import (
 	"trading/api/coinmarketcap"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestTicks() {
@@ -14,17 +14,20 @@ func ingestTicks() {
 		ticks, err := coinmarketcapClient.GetTickers()
 
 		for err != nil {
-			logger.WithField("error", err).Error("ingestTicks: publicClient.GetTickers")
+			logger.WithField("error", err).Error(
+				"ingestTicks: publicClient.GetTickers")
+
 			time.Sleep(5 * time.Second)
 			ticks, err = coinmarketcapClient.GetTickers()
 		}
 
-		points := make([]*influxDBClient.Point, 0, len(ticks))
+		points := make([]*ifxClient.Point, 0, len(ticks))
 		for _, tick := range ticks {
 
 			pt, err := prepareTickPoint(tick)
 			if err != nil {
-				logger.WithField("error", err).Error("ingestTicks: coinmarketcap.prepareTickPoint")
+				logger.WithField("error", err).Error(
+					"ingestTicks: coinmarketcap.prepareTickPoint")
 				continue
 			}
 			points = append(points, pt)
@@ -37,7 +40,7 @@ func ingestTicks() {
 
 }
 
-func prepareTickPoint(tick *coinmarketcap.Tick) (*influxDBClient.Point, error) {
+func prepareTickPoint(tick *coinmarketcap.Tick) (*ifxClient.Point, error) {
 
 	measurement := conf.Schema["ticks_measurement"]
 	timestamp := time.Unix(tick.LastUpdated, 0)
@@ -62,22 +65,23 @@ func prepareTickPoint(tick *coinmarketcap.Tick) (*influxDBClient.Point, error) {
 		"percent_change_7d":  tick.PercentChange7d,
 	}
 
-	pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+	pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 	if err != nil {
 		return nil, err
 	}
 	return pt, nil
 }
 
-func flushTickPoints(points []*influxDBClient.Point) {
+func flushTickPoints(points []*ifxClient.Point) {
 
-	bp, err := influxDBClient.NewBatchPoints(influxDBClient.BatchPointsConfig{
+	bp, err := ifxClient.NewBatchPoints(ifxClient.BatchPointsConfig{
 		Database:  conf.Schema["database"],
 		Precision: "ns",
 	})
 
 	if err != nil {
-		logger.WithField("error", err).Error("flushTickPoints: dbClient.NewBatchPoints")
+		logger.WithField("error", err).Error(
+			"flushTickPoints: dbClient.NewBatchPoints")
 		return
 	}
 

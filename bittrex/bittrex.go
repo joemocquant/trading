@@ -7,21 +7,20 @@ import (
 	"time"
 	"trading/api/bittrex/publicapi"
 	"trading/database"
-	"trading/ingestion"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 var (
 	conf          *configuration
 	logger        *logrus.Entry
-	dbClient      influxDBClient.Client
+	dbClient      ifxClient.Client
 	publicClient  *publicapi.Client
-	am            *allMarkets
-	lt            *lastTrades
-	batchsToWrite chan *ingestion.BatchPoints
+	ams           *allMarkets
+	lts           *lastTrades
+	batchsToWrite chan *database.BatchPoints
 )
 
 type configuration struct {
@@ -96,17 +95,17 @@ func init() {
 
 	publicClient = publicapi.NewClient()
 
-	am = &allMarkets{sync.Mutex{}, make(map[string]*publicapi.Market)}
-	lt = &lastTrades{sync.Mutex{}, make(map[string]*publicapi.Trade)}
+	ams = &allMarkets{sync.Mutex{}, make(map[string]*publicapi.Market)}
+	lts = &lastTrades{sync.Mutex{}, make(map[string]*publicapi.Trade)}
 
-	batchsToWrite = make(chan *ingestion.BatchPoints, conf.FlushCapacity)
+	batchsToWrite = make(chan *database.BatchPoints, conf.FlushCapacity)
 }
 
 func Ingest() {
 
 	// flushing batchs periodically
 	period := time.Duration(conf.FlushBatchsPeriodSec) * time.Second
-	go ingestion.FlushEvery(period, &ingestion.FlushInfo{
+	go database.FlushEvery(period, &database.FlushInfo{
 		batchsToWrite,
 		conf.Schema["database"],
 		dbClient,

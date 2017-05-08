@@ -3,22 +3,24 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/ingestion"
+	"trading/database"
 
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestMarketHistories() {
 
+	period := time.Duration(conf.MarketHistoriesCheckPeriodSec) * time.Second
+
 	for {
 
-		markets := getActiveMarkets()
+		markets := getActiveMarketNames()
 
 		for _, marketName := range markets {
 			go ingestMarketHistory(marketName)
 		}
 
-		<-time.After(time.Duration(conf.MarketHistoriesCheckPeriodSec) * time.Second)
+		<-time.After(period)
 	}
 }
 
@@ -27,7 +29,9 @@ func ingestMarketHistory(marketName string) {
 	marketHistory, err := publicClient.GetMarketHistory(marketName)
 
 	for err != nil {
-		logger.WithField("error", err).Error("ingestMarketHistory: publicClient.GetMarketHistory")
+		logger.WithField("error", err).Error(
+			"ingestMarketHistory: publicClient.GetMarketHistory")
+
 		time.Sleep(5 * time.Second)
 		marketHistory, err = publicClient.GetMarketHistory(marketName)
 	}
@@ -35,10 +39,11 @@ func ingestMarketHistory(marketName string) {
 	prepareMarketHistoryPoints(marketName, marketHistory)
 }
 
-func prepareMarketHistoryPoints(marketName string, mh publicapi.MarketHistory) {
+func prepareMarketHistoryPoints(marketName string,
+	mh publicapi.MarketHistory) {
 
 	measurement := conf.Schema["market_histories_measurement"]
-	points := make([]*influxDBClient.Point, 0, len(mh))
+	points := make([]*ifxClient.Point, 0, len(mh))
 
 	tags := map[string]string{
 		"source": "publicapi",
@@ -64,9 +69,10 @@ func prepareMarketHistoryPoints(marketName string, mh publicapi.MarketHistory) {
 			"order_type": trade.OrderType,
 		}
 
-		pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+		pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 		if err != nil {
-			logger.WithField("error", err).Error("prepareMarketHistoryPoints: influxDBClient.NewPoint")
+			logger.WithField("error", err).Error(
+				"prepareMarketHistoryPoints: ifxClient.NewPoint")
 			continue
 		}
 		points = append(points, pt)
@@ -80,25 +86,25 @@ func prepareMarketHistoryPoints(marketName string, mh publicapi.MarketHistory) {
 		return
 	}
 
-	batchsToWrite <- &ingestion.BatchPoints{"marketHistory", points}
+	batchsToWrite <- &database.BatchPoints{"marketHistory", points}
 }
 
 func getLastTrade(marketName string) *publicapi.Trade {
 
-	lt.Lock()
-	defer lt.Unlock()
+	lts.Lock()
+	defer lts.Unlock()
 
-	return lt.lastTrades[marketName]
+	return lts.lastTrades[marketName]
 }
 
 func setLastTrade(marketName string, newTrade *publicapi.Trade) bool {
 
-	lt.Lock()
-	defer lt.Unlock()
+	lts.Lock()
+	defer lts.Unlock()
 
-	lastTrade, ok := lt.lastTrades[marketName]
+	lastTrade, ok := lts.lastTrades[marketName]
 	if !ok || newTrade.Id > lastTrade.Id {
-		lt.lastTrades[marketName] = newTrade
+		lts.lastTrades[marketName] = newTrade
 		return true
 	}
 

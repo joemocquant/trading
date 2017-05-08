@@ -8,21 +8,20 @@ import (
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
 	"trading/database"
-	"trading/ingestion"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 var (
 	conf          *configuration
 	logger        *logrus.Entry
-	dbClient      influxDBClient.Client
+	dbClient      ifxClient.Client
 	publicClient  *publicapi.Client
 	pushClient    *pushapi.Client
 	updaters      *marketUpdaters
-	batchsToWrite chan *ingestion.BatchPoints
+	batchsToWrite chan *database.BatchPoints
 )
 
 type configuration struct {
@@ -97,15 +96,19 @@ func init() {
 		logger.WithField("error", err).Fatal("pushapi.NewPushClient")
 	}
 
-	updaters = &marketUpdaters{sync.RWMutex{}, make(map[string]pushapi.MarketUpdater)}
-	batchsToWrite = make(chan *ingestion.BatchPoints, conf.FlushCapacity)
+	updaters = &marketUpdaters{
+		sync.RWMutex{},
+		make(map[string]pushapi.MarketUpdater),
+	}
+
+	batchsToWrite = make(chan *database.BatchPoints, conf.FlushCapacity)
 }
 
 func Ingest() {
 
 	// flushing batchs periodically
 	period := time.Duration(conf.FlushBatchsPeriodMs) * time.Millisecond
-	go ingestion.FlushEvery(period, &ingestion.FlushInfo{
+	go database.FlushEvery(period, &database.FlushInfo{
 		batchsToWrite,
 		conf.Schema["database"],
 		dbClient,
@@ -127,5 +130,6 @@ func Ingest() {
 	//-- OrderBooks (publicapi)
 
 	// Init and checking order books periodically
-	go ingestOrderBooks(100000, time.Duration(conf.OrderBooksCheckPeriodSec)*time.Second)
+	period = time.Duration(conf.OrderBooksCheckPeriodSec) * time.Second
+	go ingestOrderBooks(100000, period)
 }

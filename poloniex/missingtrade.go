@@ -6,9 +6,8 @@ import (
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/database"
-	"trading/ingestion"
 
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func ingestMissingTrades() {
@@ -32,16 +31,17 @@ func ingestMissingTrades() {
 	}
 }
 
-func getLastIngestedTrades(start, end time.Time) []influxDBClient.Result {
+func getLastIngestedTrades(start, end time.Time) []ifxClient.Result {
 
 	cmd := fmt.Sprintf(
-		"SELECT trade_id FROM %s WHERE time >= %d and time < %d GROUP BY market",
+		"SELECT trade_id FROM %s WHERE time >= %d AND time < %d GROUP BY market",
 		conf.Schema["trade_updates_measurement"], start.UnixNano(), end.UnixNano())
 
 	res, err := database.QueryDB(dbClient, cmd, conf.Schema["database"])
 
 	for err != nil {
 		logger.WithField("error", err).Error("getLastTrades: database.QueryDB")
+
 		time.Sleep(5 * time.Second)
 		res, err = database.QueryDB(dbClient, cmd, conf.Schema["database"])
 	}
@@ -49,85 +49,84 @@ func getLastIngestedTrades(start, end time.Time) []influxDBClient.Result {
 	return res
 }
 
-func getMissingTradeIds(trades []influxDBClient.Result) map[string]map[int64]struct{} {
+func getMissingTradeIds(
+	trades []ifxClient.Result) map[string]map[int64]struct{} {
 
 	missingTradeIds := make(map[string]map[int64]struct{})
 
 	for _, serie := range trades[0].Series {
 
-		currencyPair := serie.Tags["market"]
+		market := serie.Tags["market"]
 		var prevId int64 = 0
 
 		for _, record := range serie.Values {
 
-			tradeId, ok := record[1].(json.Number)
-			if !ok {
-				logger.Errorf("Wrong tradeId type: %v (%s)", record[1], currencyPair)
-				continue
-			}
-
-			id, err := tradeId.Int64()
+			tradeId, err := record[1].(json.Number).Int64()
 			if err != nil {
-				logger.Errorf("Wrong tradeId type: %v (%s)", tradeId, currencyPair)
+				logger.Errorf("getMissingTradeIds: Wrong tradeId type: %v (%s)",
+					tradeId, market)
 				continue
 			}
 
-			if prevId != 0 && prevId+1 != id {
+			if prevId != 0 && prevId+1 != tradeId {
 
-				if _, ok := missingTradeIds[currencyPair]; !ok {
-					missingTradeIds[currencyPair] = make(map[int64]struct{})
+				if _, ok := missingTradeIds[market]; !ok {
+					missingTradeIds[market] = make(map[int64]struct{})
 				}
 
-				for i := prevId + 1; i < id; i++ {
-					missingTradeIds[currencyPair][i] = struct{}{}
+				for i := prevId + 1; i < tradeId; i++ {
+					missingTradeIds[market][i] = struct{}{}
 				}
 
 			}
-			prevId = id
+			prevId = tradeId
 		}
 	}
 
 	return missingTradeIds
 }
 
-func updateMissingTrades(missingTradeIds map[string]map[int64]struct{}, start, end time.Time) {
+func updateMissingTrades(missingTradeIds map[string]map[int64]struct{},
+	start, end time.Time) {
 
-	for currencyPair, _ := range missingTradeIds {
+	for market, _ := range missingTradeIds {
 
-		go func(currencyPair string) {
+		go func(market string) {
 
-			th, err := publicClient.GetTradeHistory(currencyPair, start, end)
+			th, err := publicClient.GetTradeHistory(market, start, end)
 
 			for err != nil {
-				logger.WithField("error", err).Error("getLastTrades: publicClient.GetTradeHistory")
+				logger.WithField("error", err).Error(
+					"getLastTrades: publicClient.GetTradeHistory")
+
 				time.Sleep(5 * time.Second)
-				th, err = publicClient.GetTradeHistory(currencyPair, start, end)
+				th, err = publicClient.GetTradeHistory(market, start, end)
 			}
 
-			missingTrades := make([]*publicapi.Trade, 0, len(missingTradeIds[currencyPair]))
+			mts := make([]*publicapi.Trade, 0, len(missingTradeIds[market]))
 			for _, trade := range th {
-				if _, ok := missingTradeIds[currencyPair][trade.TradeId]; ok {
-					missingTrades = append(missingTrades, trade)
+				if _, ok := missingTradeIds[market][trade.TradeId]; ok {
+					mts = append(mts, trade)
 				}
 			}
 
-			prepareMissingTradePoints(currencyPair, missingTrades)
+			prepareMissingTradePoints(market, mts)
 
-		}(currencyPair)
+		}(market)
 	}
 }
 
-func prepareMissingTradePoints(currencyPair string, mt []*publicapi.Trade) {
+func prepareMissingTradePoints(market string, mt []*publicapi.Trade) {
 
 	measurement := conf.Schema["trade_updates_measurement"]
-	points := make([]*influxDBClient.Point, 0, len(mt))
+	points := make([]*ifxClient.Point, 0, len(mt))
 
 	for _, trade := range mt {
 
 		tags := map[string]string{
 			"source":     "publicapi",
 			"order_type": trade.TypeOrder,
-			"market":     currencyPair,
+			"market":     market,
 		}
 
 		fields := map[string]interface{}{
@@ -139,13 +138,14 @@ func prepareMissingTradePoints(currencyPair string, mt []*publicapi.Trade) {
 
 		timestamp := time.Unix(trade.Date, trade.TradeId%1000000000)
 
-		pt, err := influxDBClient.NewPoint(measurement, tags, fields, timestamp)
+		pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 		if err != nil {
-			logger.WithField("error", err).Error("prepareMissingTradePoints: influxDBClient.NewPoint")
+			logger.WithField("error", err).Error(
+				"prepareMissingTradePoints: ifxClient.NewPoint")
 			continue
 		}
 		points = append(points, pt)
 	}
 
-	batchsToWrite <- &ingestion.BatchPoints{"missingTrade", points}
+	batchsToWrite <- &database.BatchPoints{"missingTrade", points}
 }

@@ -12,8 +12,9 @@ func checkMarkets() {
 		markets, err := publicClient.GetMarkets()
 
 		for err != nil {
+			logger.WithField("error", err).Error(
+				"ingestNewMarkets: publicClient.GetMarkets")
 
-			logger.WithField("error", err).Error("ingestNewMarkets: publicClient.GetMarkets")
 			time.Sleep(5 * time.Second)
 			markets, err = publicClient.GetMarkets()
 		}
@@ -24,14 +25,14 @@ func checkMarkets() {
 	}
 }
 
-func getActiveMarkets() []string {
+func getActiveMarketNames() []string {
 
-	am.Lock()
-	defer am.Unlock()
+	ams.Lock()
+	defer ams.Unlock()
 
-	res := make([]string, 0, len(am.markets))
+	res := make([]string, 0, len(ams.markets))
 
-	for name, market := range am.markets {
+	for name, market := range ams.markets {
 
 		if market.IsActive {
 			res = append(res, name)
@@ -43,10 +44,10 @@ func getActiveMarkets() []string {
 
 func setMarkets(markets []*publicapi.Market) {
 
-	am.Lock()
-	defer am.Unlock()
+	ams.Lock()
+	defer ams.Unlock()
 
 	for _, market := range markets {
-		am.markets[market.MarketName] = market
+		ams.markets[market.MarketName] = market
 	}
 }
