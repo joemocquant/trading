@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"time"
-	"trading/database"
+	"trading/networking/database"
 
 	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"

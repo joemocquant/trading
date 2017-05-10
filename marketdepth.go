@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
@@ -60,18 +60,23 @@ func getLastOrderBooksPoloniex(
 	query := fmt.Sprintf("SELECT ask_depth FROM %s ORDER BY time DESC LIMIT 1",
 		conf.Poloniex.Schema["book_orders_last_check_measurement"])
 
-	res, err := database.QueryDB(
-		dbClient, query, conf.Poloniex.Schema["database"])
+	var res []ifxClient.Result
 
-	for err != nil {
-		logger.WithFields(logrus.Fields{
-			"error": err,
-			"query": query,
-		}).Error("getLastOrderBooksPoloniex: database.QueryDB")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		res, err = database.QueryDB(
 			dbClient, query, conf.Poloniex.Schema["database"])
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger.WithField("query", query),
+		Period:   time.Duration(conf.Poloniex.MarketDepthPeriodCheckSec) * time.Second,
+		ErrorMsg: "getLastOrderBooksPoloniex: database.QueryDB",
+		Request:  request,
+	})
+
+	if !success {
+		return nil
 	}
 
 	if len(res[0].Series) == 0 || len(res[0].Series[0].Values) != 1 {
@@ -104,16 +109,15 @@ func getLastOrderBooksPoloniex(
 		conf.Poloniex.Schema["book_orders_measurement"],
 		start.UnixNano(), end.UnixNano())
 
-	res, err = database.QueryDB(
-		dbClient, query, conf.Poloniex.Schema["database"])
+	success = networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger.WithField("query", query),
+		Period:   0,
+		ErrorMsg: "getLastOrderBooksPoloniex: database.QueryDB",
+		Request:  request,
+	})
 
-	for err != nil {
-		logger.WithField("error", err).Error(
-			"getLastOrderBooksPoloniex: database.QueryDB")
-
-		time.Sleep(5 * time.Second)
-		res, err = database.QueryDB(
-			dbClient, query, conf.Poloniex.Schema["database"])
+	if !success {
+		return nil
 	}
 
 	return formatOrderBooks(res)
@@ -125,18 +129,23 @@ func getLastOrderBooksBittrex(previousStarts map[string]time.Time) orderBooks {
     GROUP BY market ORDER BY time DESC LIMIT 1`,
 		conf.Bittrex.Schema["book_orders_last_check_measurement"])
 
-	res, err := database.QueryDB(
-		dbClient, query, conf.Bittrex.Schema["database"])
+	var res []ifxClient.Result
 
-	for err != nil {
-		logger.WithFields(logrus.Fields{
-			"error": err,
-			"query": query,
-		}).Error("getLastOrderBooksBittrex: database.QueryDB")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		res, err = database.QueryDB(
 			dbClient, query, conf.Bittrex.Schema["database"])
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger.WithField("query", query),
+		Period:   time.Duration(conf.Bittrex.MarketDepthPeriodCheckSec) * time.Second,
+		ErrorMsg: "getLastOrderBooksBittrex: database.QueryDB",
+		Request:  request,
+	})
+
+	if !success {
+		return nil
 	}
 
 	if len(res[0].Series) == 0 {
@@ -178,16 +187,15 @@ func getLastOrderBooksBittrex(previousStarts map[string]time.Time) orderBooks {
 		return nil
 	}
 
-	res, err = database.QueryDB(
-		dbClient, query, conf.Bittrex.Schema["database"])
+	success = networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger.WithField("query", query),
+		Period:   0,
+		ErrorMsg: "getLastOrderBooksBittrex: database.QueryDB",
+		Request:  request,
+	})
 
-	for err != nil {
-		logger.WithField("error", err).Error(
-			"getLastOrderBooksBittrex: database.QueryDB")
-
-		time.Sleep(5 * time.Second)
-		res, err = database.QueryDB(
-			dbClient, query, conf.Bittrex.Schema["database"])
+	if !success {
+		return nil
 	}
 
 	obs := formatOrderBooks(res)
@@ -273,6 +281,10 @@ func getMarketDepths(obs orderBooks) marketDepths {
 				}
 				cs = bid.cumulativeSum
 			}
+
+			if cs == ob.bids[len(ob.bids)-1].cumulativeSum {
+				break
+			}
 		}
 	}
 
@@ -294,6 +306,10 @@ func getMarketDepths(obs orderBooks) marketDepths {
 					break
 				}
 				cs = ask.cumulativeSum
+			}
+
+			if cs == ob.asks[len(ob.asks)-1].cumulativeSum {
+				break
 			}
 		}
 	}
