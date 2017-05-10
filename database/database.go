@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 
 	"github.com/Sirupsen/logrus"
-	influxDBClient "github.com/influxdata/influxdb/client/v2"
+	ifxClient "github.com/influxdata/influxdb/client/v2"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
@@ -26,6 +26,17 @@ type influxdbConf struct {
 	Auth               map[string]string `json:"auth"`
 	TlsCertificatePath string            `json:"tls_certificate_path"`
 	LogLevel           string            `json:"log_level"`
+}
+
+type BatchPoints struct {
+	TypePoint string
+	Points    []*ifxClient.Point
+}
+
+type FlushInfo struct {
+	BatchsToWrite <-chan *BatchPoints
+	Database      string
+	DbClient      ifxClient.Client
 }
 
 func init() {
@@ -79,9 +90,9 @@ func init() {
 	}
 }
 
-func NewdbClient() (influxDBClient.Client, error) {
+func NewdbClient() (ifxClient.Client, error) {
 
-	dbClient, err := influxDBClient.NewHTTPClient(influxDBClient.HTTPConfig{
+	dbClient, err := ifxClient.NewHTTPClient(ifxClient.HTTPConfig{
 		Addr:      conf.Host,
 		Username:  conf.Auth["username"],
 		Password:  conf.Auth["password"],
@@ -95,9 +106,9 @@ func NewdbClient() (influxDBClient.Client, error) {
 	return dbClient, nil
 }
 
-func QueryDB(dbClient influxDBClient.Client, cmd, db string) ([]influxDBClient.Result, error) {
+func QueryDB(dbClient ifxClient.Client, cmd, db string) ([]ifxClient.Result, error) {
 
-	q := influxDBClient.Query{
+	q := ifxClient.Query{
 		Command:  cmd,
 		Database: db,
 	}
