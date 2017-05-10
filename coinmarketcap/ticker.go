@@ -3,6 +3,7 @@ package coinmarketcap
 import (
 	"time"
 	"trading/api/coinmarketcap"
+	"trading/networking"
 
 	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
@@ -10,32 +11,45 @@ import (
 
 func ingestTicks() {
 
+	period := time.Duration(conf.TicksCheckPeriodMin) * time.Minute
+
 	for {
-		ticks, err := coinmarketcapClient.GetTickers()
 
-		for err != nil {
-			logger.WithField("error", err).Error(
-				"ingestTicks: publicClient.GetTickers")
+		go func() {
+			var ticks coinmarketcap.Ticks
 
-			time.Sleep(5 * time.Second)
-			ticks, err = coinmarketcapClient.GetTickers()
-		}
-
-		points := make([]*ifxClient.Point, 0, len(ticks))
-		for _, tick := range ticks {
-
-			pt, err := prepareTickPoint(tick)
-			if err != nil {
-				logger.WithField("error", err).Error(
-					"ingestTicks: coinmarketcap.prepareTickPoint")
-				continue
+			request := func() (err error) {
+				ticks, err = coinmarketcapClient.GetTickers()
+				return err
 			}
-			points = append(points, pt)
-		}
 
-		flushTickPoints(points)
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger,
+				Period:   period,
+				ErrorMsg: "ingestTicks: publicClient.GetTickers",
+				Request:  request,
+			})
 
-		<-time.After(time.Duration(conf.TicksCheckPeriodMin) * time.Minute)
+			if !success {
+				return
+			}
+
+			points := make([]*ifxClient.Point, 0, len(ticks))
+			for _, tick := range ticks {
+
+				pt, err := prepareTickPoint(tick)
+				if err != nil {
+					logger.WithField("error", err).Error(
+						"ingestTicks: coinmarketcap.prepareTickPoint")
+					continue
+				}
+				points = append(points, pt)
+			}
+
+			flushTickPoints(points)
+		}()
+
+		<-time.After(period)
 	}
 
 }

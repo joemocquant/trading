@@ -3,30 +3,45 @@ package poloniex
 import (
 	"time"
 	"trading/api/poloniex/publicapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
-func ingestOrderBooks(depth int, period time.Duration) {
+func ingestOrderBooks() {
+
+	depth := 100000
+	period := time.Duration(conf.OrderBooksCheckPeriodSec) * time.Second
 
 	for {
-		orderBooks, err := publicClient.GetOrderBooks(depth)
 
-		for err != nil {
-			logger.WithField("error", err).Error(
-				"ingestOrderBooks: publicClient.GetOrderBooks")
+		go func() {
+			var orderBooks publicapi.OrderBooks
 
-			time.Sleep(5 * time.Second)
-			orderBooks, err = publicClient.GetOrderBooks(depth)
-		}
+			request := func() (err error) {
+				orderBooks, err = publicClient.GetOrderBooks(depth)
+				return err
+			}
 
-		baseTimestamp := time.Now().Unix()
-		for market, ob := range orderBooks {
-			prepareOrderBookPoints(market, ob, depth, baseTimestamp)
-		}
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger,
+				Period:   period,
+				ErrorMsg: "ingestOrderBooks: publicClient.GetOrderBooks",
+				Request:  request,
+			})
 
-		prepareLastOrderBookCheckPoints(orderBooks, depth, baseTimestamp)
+			if !success {
+				return
+			}
+
+			baseTimestamp := time.Now().Unix()
+			for market, ob := range orderBooks {
+				prepareOrderBookPoints(market, ob, depth, baseTimestamp)
+			}
+
+			prepareLastOrderBookCheckPoints(orderBooks, depth, baseTimestamp)
+		}()
 
 		<-time.After(period)
 	}

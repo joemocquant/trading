@@ -3,7 +3,8 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -26,14 +27,22 @@ func ingestMarketHistories() {
 
 func ingestMarketHistory(marketName string) {
 
-	marketHistory, err := publicClient.GetMarketHistory(marketName)
+	var marketHistory publicapi.MarketHistory
 
-	for err != nil {
-		logger.WithField("error", err).Error(
-			"ingestMarketHistory: publicClient.GetMarketHistory")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		marketHistory, err = publicClient.GetMarketHistory(marketName)
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger,
+		Period:   time.Duration(conf.MarketHistoriesCheckPeriodSec) * time.Second,
+		ErrorMsg: "ingestMarketHistory: publicClient.GetMarketHistory",
+		Request:  request,
+	})
+
+	if !success {
+		return
 	}
 
 	prepareMarketHistoryPoints(marketName, marketHistory)

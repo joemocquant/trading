@@ -3,25 +3,38 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
+	"trading/networking"
 )
 
 func checkMarkets() {
 
+	period := time.Duration(conf.MarketsCheckPeriodMin) * time.Minute
+
 	for {
 
-		markets, err := publicClient.GetMarkets()
+		go func() {
+			var markets publicapi.Markets
 
-		for err != nil {
-			logger.WithField("error", err).Error(
-				"ingestNewMarkets: publicClient.GetMarkets")
+			request := func() (err error) {
+				markets, err = publicClient.GetMarkets()
+				return err
+			}
 
-			time.Sleep(5 * time.Second)
-			markets, err = publicClient.GetMarkets()
-		}
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger,
+				Period:   period,
+				ErrorMsg: "ingestNewMarkets: publicClient.GetMarkets",
+				Request:  request,
+			})
 
-		setMarkets(markets)
+			if !success {
+				return
+			}
 
-		<-time.After(time.Duration(conf.MarketsCheckPeriodMin) * time.Minute)
+			setMarkets(markets)
+		}()
+
+		<-time.After(period)
 	}
 }
 

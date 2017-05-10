@@ -3,7 +3,8 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -13,30 +14,41 @@ func ingestMarketSummaries() {
 	period := time.Duration(conf.MarketSummariesCheckPeriodSec) * time.Second
 
 	for {
-		marketSummaries, err := publicClient.GetMarketSummaries()
 
-		for err != nil {
-			logger.WithField("error", err).Error(
-				"ingestMarketSummaries: publicClient.GetMarketSummaries")
+		go func() {
+			var marketSummaries publicapi.MarketSummaries
 
-			time.Sleep(5 * time.Second)
-			marketSummaries, err = publicClient.GetMarketSummaries()
-		}
-
-		points := make([]*ifxClient.Point, 0, len(marketSummaries))
-
-		for _, marketSummary := range marketSummaries {
-
-			pt, err := prepareMarketSummaryPoint(marketSummary)
-			if err != nil {
-				logger.WithField("error", err).Error(
-					"ingestMarketSummaries: prepareMarketSummaryPoint")
-				continue
+			request := func() (err error) {
+				marketSummaries, err = publicClient.GetMarketSummaries()
+				return err
 			}
-			points = append(points, pt)
-		}
 
-		batchsToWrite <- &database.BatchPoints{"marketSummary", points}
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger,
+				Period:   period,
+				ErrorMsg: "ingestMarketSummaries: publicClient.GetMarketSummaries",
+				Request:  request,
+			})
+
+			if !success {
+				return
+			}
+
+			points := make([]*ifxClient.Point, 0, len(marketSummaries))
+
+			for _, marketSummary := range marketSummaries {
+
+				pt, err := prepareMarketSummaryPoint(marketSummary)
+				if err != nil {
+					logger.WithField("error", err).Error(
+						"ingestMarketSummaries: prepareMarketSummaryPoint")
+					continue
+				}
+				points = append(points, pt)
+			}
+
+			batchsToWrite <- &database.BatchPoints{"marketSummary", points}
+		}()
 
 		<-time.After(period)
 	}

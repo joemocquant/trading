@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/database"
+	"trading/networking/database"
 
 	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"

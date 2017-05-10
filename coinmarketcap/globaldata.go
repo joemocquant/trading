@@ -3,6 +3,7 @@ package coinmarketcap
 import (
 	"time"
 	"trading/api/coinmarketcap"
+	"trading/networking"
 
 	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
@@ -10,27 +11,40 @@ import (
 
 func ingestGlobalData() {
 
+	period := time.Duration(conf.GlobalDataCheckPeriodMin) * time.Minute
+
 	for {
-		globalData, err := coinmarketcapClient.GetGlobalData()
 
-		for err != nil {
-			logger.WithField("error", err).Error(
-				"ingestGlobalData: publicClient.GetGlobalData")
+		go func() {
+			var globalData *coinmarketcap.GlobalData
 
-			time.Sleep(5 * time.Second)
-			globalData, err = coinmarketcapClient.GetGlobalData()
-		}
+			request := func() (err error) {
+				globalData, err = coinmarketcapClient.GetGlobalData()
+				return err
+			}
 
-		pt, err := prepareGlobalDataPoint(globalData)
-		if err != nil {
-			logger.WithField("error", err).Error(
-				"ingestGlobalData: prepareGlobalDataPoint")
-			continue
-		}
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger,
+				Period:   period,
+				ErrorMsg: "ingestGlobalData: prepareGlobalDataPoint",
+				Request:  request,
+			})
 
-		flushGlobalDataPoint(pt)
+			if !success {
+				return
+			}
 
-		<-time.After(time.Duration(conf.GlobalDataCheckPeriodMin) * time.Minute)
+			pt, err := prepareGlobalDataPoint(globalData)
+			if err != nil {
+				logger.WithField("error", err).Error(
+					"ingestGlobalData: prepareGlobalDataPoint")
+				return
+			}
+
+			flushGlobalDataPoint(pt)
+		}()
+
+		<-time.After(period)
 	}
 }
 

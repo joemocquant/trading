@@ -7,7 +7,7 @@ import (
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
-	"trading/database"
+	"trading/networking/database"
 
 	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
@@ -130,6 +130,5 @@ func Ingest() {
 	//-- OrderBooks (publicapi)
 
 	// Init and checking order books periodically
-	period = time.Duration(conf.OrderBooksCheckPeriodSec) * time.Second
-	go ingestOrderBooks(100000, period)
+	go ingestOrderBooks()
 }

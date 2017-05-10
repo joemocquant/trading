@@ -3,7 +3,8 @@ package bittrex
 import (
 	"time"
 	"trading/api/bittrex/publicapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -24,14 +25,22 @@ func ingestOrderBooks() {
 
 func ingestOrderBook(market string) {
 
-	orderBook, err := publicClient.GetOrderBook(market, "both")
+	var orderBook *publicapi.OrderBook
 
-	for err != nil {
-		logger.WithField("error", err).Error(
-			"ingestOrderBook: publicClient.GetOrderBook")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		orderBook, err = publicClient.GetOrderBook(market, "both")
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger,
+		Period:   time.Duration(conf.OrderBooksCheckPeriodSec) * time.Second,
+		ErrorMsg: "ingestOrderBook: publicClient.GetOrderBook",
+		Request:  request,
+	})
+
+	if !success {
+		return
 	}
 
 	baseTimestamp := time.Now().Unix()

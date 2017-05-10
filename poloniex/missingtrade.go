@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 	"trading/api/poloniex/publicapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -22,6 +23,10 @@ func ingestMissingTrades() {
 		go func(start, end time.Time) {
 
 			res := getLastIngestedTrades(start, end)
+			if res == nil {
+				return
+			}
+
 			missingTradeIds := getMissingTradeIds(res)
 			updateMissingTrades(missingTradeIds, start, end)
 
@@ -37,13 +42,22 @@ func getLastIngestedTrades(start, end time.Time) []ifxClient.Result {
 		"SELECT trade_id FROM %s WHERE time >= %d AND time < %d GROUP BY market",
 		conf.Schema["trade_updates_measurement"], start.UnixNano(), end.UnixNano())
 
-	res, err := database.QueryDB(dbClient, cmd, conf.Schema["database"])
+	var res []ifxClient.Result
 
-	for err != nil {
-		logger.WithField("error", err).Error("getLastTrades: database.QueryDB")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		res, err = database.QueryDB(dbClient, cmd, conf.Schema["database"])
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger,
+		Period:   0,
+		ErrorMsg: "getLastIngestedTrades: database.QueryDB",
+		Request:  request,
+	})
+
+	if !success {
+		return nil
 	}
 
 	return res
@@ -93,14 +107,22 @@ func updateMissingTrades(missingTradeIds map[string]map[int64]struct{},
 
 		go func(market string) {
 
-			th, err := publicClient.GetTradeHistory(market, start, end)
+			var th publicapi.TradeHistory
 
-			for err != nil {
-				logger.WithField("error", err).Error(
-					"getLastTrades: publicClient.GetTradeHistory")
-
-				time.Sleep(5 * time.Second)
+			request := func() (err error) {
 				th, err = publicClient.GetTradeHistory(market, start, end)
+				return err
+			}
+
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger,
+				Period:   0,
+				ErrorMsg: "updateMissingTrades: publicClient.GetTradeHistory",
+				Request:  request,
+			})
+
+			if !success {
+				return
 			}
 
 			mts := make([]*publicapi.Trade, 0, len(missingTradeIds[market]))

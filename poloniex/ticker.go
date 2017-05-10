@@ -4,7 +4,8 @@ import (
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
@@ -21,15 +22,22 @@ func ingestTicks() {
 
 func ingestPublicTicks() {
 
-	ticks, err := publicClient.GetTickers()
+	var ticks publicapi.Ticks
 
-	for err != nil {
-
-		logger.WithField("error", err).Error(
-			"ingestPublicTicks: publicClient.GetTickers")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		ticks, err = publicClient.GetTickers()
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger,
+		Period:   time.Duration(conf.PublicTicksCheckPeriodSec) * time.Second,
+		ErrorMsg: "ingestPublicTicks: publicClient.GetTickers",
+		Request:  request,
+	})
+
+	if !success {
+		return
 	}
 
 	points := make([]*ifxClient.Point, 0, len(ticks))
@@ -82,13 +90,23 @@ func preparePublicTickPoint(market string,
 
 func ingestPushTicks() {
 
-	ticker, err := pushClient.SubscribeTicker()
+	var ticker pushapi.Ticker
 
-	for err != nil {
-		logger.WithField("error", err).Error(
-			"ingestPushTicks: pushClient.SubscribeTicker")
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		ticker, err = pushClient.SubscribeTicker()
+		return err
+	}
+
+	requestInfo := &networking.RequestInfo{
+		Logger:   logger,
+		Period:   0,
+		ErrorMsg: "ingestPushTicks: pushClient.SubscribeTicker",
+		Request:  request,
+	}
+
+	success := networking.ExecuteRequest(requestInfo)
+	for !success {
+		success = networking.ExecuteRequest(requestInfo)
 	}
 
 	for {

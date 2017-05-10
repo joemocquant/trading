@@ -2,10 +2,11 @@ package poloniex
 
 import (
 	"time"
+	"trading/api/poloniex/publicapi"
 	"trading/api/poloniex/pushapi"
-	"trading/database"
+	"trading/networking"
+	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
@@ -13,21 +14,29 @@ func ingestMarkets() {
 
 	// checking new markets periodically
 	for {
-		ingestNewMarkets()
+		go ingestNewMarkets()
 		<-time.After(time.Duration(conf.MarketCheckPeriodMin) * time.Minute)
 	}
 }
 
 func ingestNewMarkets() {
 
-	tickers, err := publicClient.GetTickers()
+	var tickers publicapi.Ticks
 
-	for err != nil {
-		logger.WithField("error", err).Error(
-			"ingestNewMarkets: publicClient.GetTickers")
-
-		time.Sleep(5 * time.Second)
+	request := func() (err error) {
 		tickers, err = publicClient.GetTickers()
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger,
+		Period:   time.Duration(conf.MarketCheckPeriodMin) * time.Minute,
+		ErrorMsg: "ingestNewMarkets: publicClient.GetTickers",
+		Request:  request,
+	})
+
+	if !success {
+		return
 	}
 
 	newMarkets := make([]string, 0, len(tickers))
@@ -47,22 +56,31 @@ func ingestNewMarkets() {
 
 	for _, market := range newMarkets {
 
-		marketUpdater, err := pushClient.SubscribeMarket(market)
+		go func(market string) {
+			var marketUpdater pushapi.MarketUpdater
 
-		if err != nil {
+			request := func() (err error) {
+				marketUpdater, err = pushClient.SubscribeMarket(market)
+				return err
+			}
 
-			logger.WithFields(logrus.Fields{
-				"market": market,
-				"error":  err,
-			}).Error("ingestNewMarkets: pushClient.SubscribeMarket")
-			continue
-		}
+			success := networking.ExecuteRequest(&networking.RequestInfo{
+				Logger:   logger.WithField("market", market),
+				Period:   time.Duration(conf.MarketCheckPeriodMin) * time.Minute,
+				ErrorMsg: "ingestNewMarkets: pushClient.SubscribeMarket",
+				Request:  request,
+			})
 
-		updaters.Lock()
-		updaters.mus[market] = marketUpdater
-		updaters.Unlock()
+			if !success {
+				return
+			}
 
-		go getMarketNewPoints(marketUpdater, market)
+			updaters.Lock()
+			updaters.mus[market] = marketUpdater
+			updaters.Unlock()
+
+			go getMarketNewPoints(marketUpdater, market)
+		}(market)
 	}
 }
 
