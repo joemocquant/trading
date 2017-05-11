@@ -61,13 +61,13 @@ func prepareMarketHistoryPoints(marketName string,
 
 	lastTrade := getLastTrade(marketName)
 
-	for _, trade := range mh {
+	for index, trade := range mh {
 
 		if lastTrade != nil && trade.Id <= lastTrade.Id {
 			break
 		}
 
-		timestamp := time.Unix(trade.TimeStamp, 0)
+		timestamp := time.Unix(trade.TimeStamp, int64(index))
 
 		fields := map[string]interface{}{
 			"id":         trade.Id,
