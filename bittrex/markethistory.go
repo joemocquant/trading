@@ -72,7 +72,7 @@ func prepareMarketHistoryPoints(marketName string,
 		fields := map[string]interface{}{
 			"id":         trade.Id,
 			"quantity":   trade.Quantity,
-			"price":      trade.Price,
+			"rate":       trade.Price,
 			"total":      trade.Total,
 			"fill_type":  trade.FillType,
 			"order_type": trade.OrderType,
