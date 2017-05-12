@@ -51,7 +51,7 @@ func ingestMarketHistory(marketName string) {
 func prepareMarketHistoryPoints(marketName string,
 	mh publicapi.MarketHistory) {
 
-	measurement := conf.Schema["market_histories_measurement"]
+	measurement := conf.Schema["trades_measurement"]
 	points := make([]*ifxClient.Point, 0, len(mh))
 
 	tags := map[string]string{

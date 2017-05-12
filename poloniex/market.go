@@ -175,7 +175,7 @@ func prepareMarketPoint(marketUpdate *pushapi.MarketUpdate,
 			"quantity": nt.Amount,
 			"total":    nt.Total,
 		}
-		measurement = conf.Schema["trade_updates_measurement"]
+		measurement = conf.Schema["trades_measurement"]
 		ns := nt.TradeId % int64(time.Second/time.Nanosecond)
 		timestamp = time.Unix(nt.Date, ns)
 	}

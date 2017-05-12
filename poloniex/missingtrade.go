@@ -40,7 +40,7 @@ func getLastIngestedTrades(start, end time.Time) []ifxClient.Result {
 
 	cmd := fmt.Sprintf(
 		"SELECT trade_id FROM %s WHERE time >= %d AND time < %d GROUP BY market",
-		conf.Schema["trade_updates_measurement"], start.UnixNano(), end.UnixNano())
+		conf.Schema["trades_measurement"], start.UnixNano(), end.UnixNano())
 
 	var res []ifxClient.Result
 
@@ -140,7 +140,7 @@ func updateMissingTrades(missingTradeIds map[string]map[int64]struct{},
 
 func prepareMissingTradePoints(market string, mt []*publicapi.Trade) {
 
-	measurement := conf.Schema["trade_updates_measurement"]
+	measurement := conf.Schema["trades_measurement"]
 	points := make([]*ifxClient.Point, 0, len(mt))
 
 	for _, trade := range mt {

@@ -17,7 +17,7 @@
       "schema": {
         "database": "poloniex",
         "book_updates_measurement": "book_updates",
-        "trade_updates_measurement": "trade_updates",
+        "trades_measurement": "trade_updates",
         "book_orders_measurement": "book_orders",
         "book_orders_last_check_measurement": "book_orders_last_check",
         "ticks_measurement": "ticks"
@@ -33,7 +33,7 @@
     "bittrex": {
       "schema": {
         "database": "bittrex",
-        "market_histories_measurement": "market_histories",
+        "trades_measurement": "market_histories",
         "book_orders_measurement": "book_orders",
         "book_orders_last_check_measurement": "book_orders_last_check",
         "market_summaries_measurement": "market_summaries"
