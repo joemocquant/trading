@@ -31,6 +31,7 @@ type influxdbConf struct {
 type BatchPoints struct {
 	TypePoint string
 	Points    []*ifxClient.Point
+	Callback  func()
 }
 
 type FlushInfo struct {

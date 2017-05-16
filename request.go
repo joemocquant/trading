@@ -38,3 +38,14 @@ func ExecuteRequest(ri *RequestInfo) bool {
 
 	return true
 }
+
+func RunEvery(frequency time.Duration, task func(int64)) {
+
+	for {
+		now := time.Now().UnixNano()
+		nextRun := now - (now % int64(frequency)) + int64(frequency)
+		time.Sleep(time.Duration(nextRun - now))
+
+		task(nextRun)
+	}
+}

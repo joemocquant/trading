@@ -50,6 +50,12 @@ func flushBatchs(fi *FlushInfo, count int) {
 		return
 	}
 
+	for _, batchPoints := range batchPointsArr {
+		if batchPoints.Callback != nil {
+			go batchPoints.Callback()
+		}
+	}
+
 	if logrus.GetLevel() >= logrus.DebugLevel {
 
 		switch fi.Database {
@@ -190,34 +196,56 @@ func flushBittrexDebug(batchPointsArr []*BatchPoints) {
 
 func flushMetricsDebug(batchPointsArr []*BatchPoints) {
 
-	poloniexMarketDepthBatchCount, poloniexMarketDepthPointCount := 0, 0
 	bittrexMarketDepthBatchCount, bittrexMarketDepthPointCount := 0, 0
+	poloniexMarketDepthBatchCount, poloniexMarketDepthPointCount := 0, 0
+	bittrexOHLCBatchCount, bittrexOHLCPointCount := 0, 0
+	poloniexOHLCBatchCount, poloniexOHLCPointCount := 0, 0
 
 	for _, batchPoints := range batchPointsArr {
 		switch batchPoints.TypePoint {
+
+		case "bittrexMarketDepth":
+			bittrexMarketDepthBatchCount++
+			bittrexMarketDepthPointCount += len(batchPoints.Points)
 
 		case "poloniexMarketDepth":
 			poloniexMarketDepthBatchCount++
 			poloniexMarketDepthPointCount += len(batchPoints.Points)
 
-		case "bittrexMarketDepth":
-			bittrexMarketDepthBatchCount++
-			bittrexMarketDepthPointCount += len(batchPoints.Points)
+		case "bittrexOHLC":
+			bittrexOHLCBatchCount++
+			bittrexOHLCPointCount += len(batchPoints.Points)
+
+		case "poloniexOHLC":
+			poloniexOHLCBatchCount++
+			poloniexOHLCPointCount += len(batchPoints.Points)
 		}
 	}
 
 	toPrint := fmt.Sprintf("[Metrics Flush]: %d batchs (%d points)",
-		poloniexMarketDepthBatchCount+bittrexMarketDepthBatchCount,
-		poloniexMarketDepthPointCount+bittrexMarketDepthPointCount)
+		bittrexMarketDepthBatchCount+poloniexMarketDepthBatchCount+
+			bittrexOHLCBatchCount+poloniexOHLCBatchCount,
+		bittrexMarketDepthPointCount+poloniexMarketDepthPointCount+
+			bittrexOHLCPointCount+poloniexOHLCPointCount)
+
+	if bittrexMarketDepthBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d bittrexMarketDepths (%d)",
+			bittrexMarketDepthBatchCount, bittrexMarketDepthPointCount)
+	}
 
 	if poloniexMarketDepthBatchCount > 0 {
 		toPrint += fmt.Sprintf(" %d poloniexMarketDepths (%d)",
 			poloniexMarketDepthBatchCount, poloniexMarketDepthPointCount)
 	}
 
-	if bittrexMarketDepthBatchCount > 0 {
-		toPrint += fmt.Sprintf(" %d bittrexMarketDepths (%d)",
-			bittrexMarketDepthBatchCount, bittrexMarketDepthPointCount)
+	if bittrexOHLCBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d bittrexOHLCs (%d)",
+			bittrexOHLCBatchCount, bittrexOHLCPointCount)
+	}
+
+	if poloniexOHLCBatchCount > 0 {
+		toPrint += fmt.Sprintf(" %d poloniexOHLCs (%d)",
+			poloniexOHLCBatchCount, poloniexOHLCPointCount)
 	}
 
 	logger.Debug(toPrint)
