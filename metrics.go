@@ -23,18 +23,51 @@ type configuration struct {
 }
 
 type metricsConf struct {
-	LogLevel             string            `json:"log_level"`
-	MarketDepthIntervals []float64         `json:"market_depth_intervals"`
-	Schema               map[string]string `json:"schema"`
-	FlushBatchsPeriodMs  int               `json:"flush_batchs_period_ms"`
-	FlushCapacity        int               `json:"flush_capacity"`
-	Poloniex             exchangeConf      `json:"poloniex"`
-	Bittrex              exchangeConf      `json:"bittrex"`
+	LogLevel            string            `json:"log_level"`
+	Schema              map[string]string `json:"schema"`
+	FlushBatchsPeriodMs int               `json:"flush_batchs_period_ms"`
+	FlushCapacity       int               `json:"flush_capacity"`
+	MarketDepths        *marketDepthsConf `json:"market_depths"`
+	Ohlc                *ohlcConf         `json:"ohlc"`
+	Sma                 *smaConf          `json:"sma"`
+	Sources             *sources          `json:"sources"`
+}
+
+type marketDepthsConf struct {
+	Intervals                  []float64 `json:"intervals"`
+	Frequency                  string    `json:"frequency"`
+	PoloniexHardFetchFrequency int       `json:"poloniex_hard_fetch_frequency"`
+}
+
+type ohlcConf struct {
+	Periods   []string `json:"periods"`
+	Frequency string   `json:"frequency"`
+}
+
+type smaConf struct {
+	Periods   []string `json:"periods"`
+	Frequency string   `json:"frequency"`
+}
+
+type sources struct {
+	Poloniex *exchangeConf `json:"poloniex"`
+	Bittrex  *exchangeConf `json:"bittrex"`
 }
 
 type exchangeConf struct {
-	Schema                    map[string]string `json:"schema"`
-	MarketDepthPeriodCheckSec int               `json:"market_depth_period_check_sec"`
+	Schema map[string]string `json:"schema"`
+}
+
+type indicators map[string]*indicator
+
+type indicator struct {
+	period      time.Duration
+	indexPeriod int
+	dataSource  *exchangeConf
+	source      string
+	destination string
+	nextRun     int64
+	callback    func()
 }
 
 func init() {
@@ -91,5 +124,6 @@ func ComputeMetrics() {
 		dbClient,
 	})
 
-	go computeMarketDepth()
+	go computeMarketDepths()
+	go computeBaseOHLC()
 }

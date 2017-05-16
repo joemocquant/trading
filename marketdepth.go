@@ -1,26 +1,30 @@
 package metrics
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 	"trading/networking"
 	"trading/networking/database"
 
+	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 type orderBooks map[string]*orderBook
 
 type orderBook struct {
-	asks []*order
-	bids []*order
+	sequence int64
+	asks     []*order
+	bids     []*order
 }
 
 type order struct {
 	rate          float64
+	quantity      float64
+	total         float64
 	cumulativeSum float64
+	orderType     string
 }
 
 type marketDepths map[string]*marketDepth
@@ -30,176 +34,65 @@ type marketDepth struct {
 	asksDepth map[float64]float64
 }
 
-type getLastOrderBooks func(map[string]time.Time) orderBooks
+func computeMarketDepths() {
 
-func computeMarketDepth() {
-
-	cmd := func(period time.Duration, globs getLastOrderBooks, exchange string) {
-
-		previousStarts := make(map[string]time.Time)
-
-		for {
-			obs := globs(previousStarts)
-			mds := getMarketDepths(obs)
-			prepareMarketDepthsPoints(mds, previousStarts, exchange)
-
-			<-time.After(period)
-		}
-	}
-
-	p := time.Duration(conf.Poloniex.MarketDepthPeriodCheckSec) * time.Second
-	go cmd(p, getLastOrderBooksPoloniex, "poloniex")
-
-	p = time.Duration(conf.Bittrex.MarketDepthPeriodCheckSec) * time.Second
-	go cmd(p, getLastOrderBooksBittrex, "bittrex")
-}
-
-func getLastOrderBooksPoloniex(
-	previousStarts map[string]time.Time) orderBooks {
-
-	query := fmt.Sprintf("SELECT ask_depth FROM %s ORDER BY time DESC LIMIT 1",
-		conf.Poloniex.Schema["book_orders_last_check_measurement"])
-
-	var res []ifxClient.Result
-
-	request := func() (err error) {
-		res, err = database.QueryDB(
-			dbClient, query, conf.Poloniex.Schema["database"])
-		return err
-	}
-
-	success := networking.ExecuteRequest(&networking.RequestInfo{
-		Logger:   logger.WithField("query", query),
-		Period:   time.Duration(conf.Poloniex.MarketDepthPeriodCheckSec) * time.Second,
-		ErrorMsg: "getLastOrderBooksPoloniex: database.QueryDB",
-		Request:  request,
-	})
-
-	if !success {
-		return nil
-	}
-
-	if len(res[0].Series) == 0 || len(res[0].Series[0].Values) != 1 {
-		logger.Info("getLastOrderBooksPoloniex: no orderBooks found")
-		return nil
-	}
-
-	start, err := time.Parse(
-		time.RFC3339, res[0].Series[0].Values[0][0].(string))
-
+	f, err := time.ParseDuration(conf.MarketDepths.Frequency)
 	if err != nil {
-		logger.WithField("error", err).Error(
-			"getLastOrderBooksPoloniex: time.Parse")
-		return nil
+		logger.WithField("error", err).Fatal(
+			"computeMarketDepths: time.ParseDuration")
 	}
 
-	prevousStart, ok := previousStarts["allMarkets"]
-
-	if ok && prevousStart.Unix() == start.Unix() {
-		return nil
-	} else {
-		previousStarts["allMarkets"] = start
-	}
-
-	end := start.Add(1 * time.Second)
-
-	query = fmt.Sprintf(
-		`SELECT rate, cumulative_sum, order_type FROM %s
-    WHERE time >= %d AND time < %d GROUP BY market`,
-		conf.Poloniex.Schema["book_orders_measurement"],
-		start.UnixNano(), end.UnixNano())
-
-	success = networking.ExecuteRequest(&networking.RequestInfo{
-		Logger:   logger.WithField("query", query),
-		Period:   0,
-		ErrorMsg: "getLastOrderBooksPoloniex: database.QueryDB",
-		Request:  request,
+	computeMarketDepthsBittrex(&indicator{
+		period:      f,
+		dataSource:  conf.Sources.Bittrex,
+		destination: conf.Schema["market_depths_measurement"],
 	})
 
-	if !success {
-		return nil
-	}
-
-	return formatOrderBooks(res)
+	computeMarketDepthsPoloniex(&indicator{
+		period:      f,
+		dataSource:  conf.Sources.Poloniex,
+		destination: conf.Schema["market_depths_measurement"],
+	})
 }
 
-func getLastOrderBooksBittrex(previousStarts map[string]time.Time) orderBooks {
+func computeMarketDepthsBittrex(ind *indicator) {
 
-	query := fmt.Sprintf(`SELECT ask_depth FROM %s
-    GROUP BY market ORDER BY time DESC LIMIT 1`,
-		conf.Bittrex.Schema["book_orders_last_check_measurement"])
+	go networking.RunEvery(ind.period, func(nextRun int64) {
 
-	var res []ifxClient.Result
+		ind.nextRun = nextRun
 
-	request := func() (err error) {
-		res, err = database.QueryDB(
-			dbClient, query, conf.Bittrex.Schema["database"])
-		return err
-	}
+		obs := getLastOrderBooksBittrex(ind, nil)
+		// printOrderBook(obs["BTC-STRAT"], 10)
+		mds := getMarketDepths(obs)
+		prepareMarketDepthsPoints(ind, mds)
+	})
+}
 
-	success := networking.ExecuteRequest(&networking.RequestInfo{
-		Logger:   logger.WithField("query", query),
-		Period:   time.Duration(conf.Bittrex.MarketDepthPeriodCheckSec) * time.Second,
-		ErrorMsg: "getLastOrderBooksBittrex: database.QueryDB",
-		Request:  request,
+func computeMarketDepthsPoloniex(ind *indicator) {
+
+	var obs orderBooks
+	i := 0
+
+	go networking.RunEvery(ind.period, func(nextRun int64) {
+
+		ind.nextRun = nextRun
+
+		if i%conf.MarketDepths.PoloniexHardFetchFrequency == 0 {
+			obs = getLastOrderBooksPoloniex(ind, nil)
+			i = 0
+		}
+		i++
+
+		bookUpdates := getBookUpdates(obs, ind)
+		mergeOrderBooksWithBookUpdates(obs, bookUpdates)
+
+		// printOrderBook(obs["BTC_STRAT"], 10)
+		// getLossStatus(obs["BTC_STRAT"].sequence, bookUpdates["BTC_STRAT"])
+
+		mds := getMarketDepths(obs)
+		prepareMarketDepthsPoints(ind, mds)
 	})
 
-	if !success {
-		return nil
-	}
-
-	if len(res[0].Series) == 0 {
-		logger.Info("getLastOrderBooksBittrex: no orderBooks found")
-		return nil
-	}
-
-	query = ""
-	for _, serie := range res[0].Series {
-
-		market := serie.Tags["market"]
-
-		start, err := time.Parse(
-			time.RFC3339, serie.Values[0][0].(string))
-
-		if err != nil {
-			logger.WithField("error", err).Error(
-				"getLastOrderBooksBittrex: time.Parse")
-			continue
-		}
-
-		prevousStart, ok := previousStarts[market]
-		if ok && prevousStart.Unix() == start.Unix() {
-			continue
-		} else {
-			previousStarts[market] = start
-			start := previousStarts[market]
-			end := start.Add(1 * time.Second)
-
-			query += fmt.Sprintf(
-				`SELECT rate, cumulative_sum, order_type FROM %s
-      WHERE market = '%s' AND time >= %d AND time < %d GROUP BY market;`,
-				conf.Bittrex.Schema["book_orders_measurement"],
-				market, start.UnixNano(), end.UnixNano())
-		}
-	}
-
-	if query == "" {
-		return nil
-	}
-
-	success = networking.ExecuteRequest(&networking.RequestInfo{
-		Logger:   logger.WithField("query", query),
-		Period:   0,
-		ErrorMsg: "getLastOrderBooksBittrex: database.QueryDB",
-		Request:  request,
-	})
-
-	if !success {
-		return nil
-	}
-
-	obs := formatOrderBooks(res)
-	return obs
 }
 
 func formatOrderBooks(res []ifxClient.Result) orderBooks {
@@ -214,28 +107,63 @@ func formatOrderBooks(res []ifxClient.Result) orderBooks {
 
 			for _, o := range serie.Values {
 
-				rate, err := o[1].(json.Number).Float64()
-
+				rate, err := networking.ConvertJsonValueToFloat64(o[1])
 				if err != nil {
-					logger.Errorf("formatOrderBooks: Wrong rate type: %v (%s)",
-						rate, market)
+					logger.WithFields(logrus.Fields{
+						"error":  err,
+						"market": market,
+					}).Error("formatOrderBooks: networking.ConvertJsonValueToFloat64")
 					continue
 				}
 
-				cumulativeSum, err := o[2].(json.Number).Float64()
-
+				quantity, err := networking.ConvertJsonValueToFloat64(o[2])
 				if err != nil {
-					logger.Errorf("formatOrderBooks: Wrong cumulativeSum type: %v (%s)",
-						cumulativeSum, market)
+					logger.WithFields(logrus.Fields{
+						"error":  err,
+						"market": market,
+					}).Error("formatOrderBooks: networking.ConvertJsonValueToFloat64")
 					continue
 				}
 
-				orderType := o[3].(string)
+				total, err := networking.ConvertJsonValueToFloat64(o[3])
+				if err != nil {
+					logger.WithFields(logrus.Fields{
+						"error":  err,
+						"market": market,
+					}).Error("formatOrderBooks: networking.ConvertJsonValueToFloat64")
+					continue
+				}
+
+				cumulativeSum, err := networking.ConvertJsonValueToFloat64(o[4])
+				if err != nil {
+					logger.WithFields(logrus.Fields{
+						"error":  err,
+						"market": market,
+					}).Error("formatOrderBooks: networking.ConvertJsonValueToFloat64")
+					continue
+				}
+
+				orderType, err := networking.ConvertJsonValueToString(o[5])
+				if err != nil {
+					logger.WithFields(logrus.Fields{
+						"error":  err,
+						"market": market,
+					}).Error("formatOrderBooks: networking.ConvertJsonValueToString")
+					continue
+				}
+
+				order := &order{
+					rate:          rate,
+					quantity:      quantity,
+					total:         total,
+					cumulativeSum: cumulativeSum,
+					orderType:     orderType,
+				}
 
 				if orderType == "ask" {
-					ob.asks = append(ob.asks, &order{rate, cumulativeSum})
+					ob.asks = append(ob.asks, order)
 				} else {
-					ob.bids = append(ob.bids, &order{rate, cumulativeSum})
+					ob.bids = append(ob.bids, order)
 				}
 			}
 
@@ -250,7 +178,7 @@ func formatOrderBooks(res []ifxClient.Result) orderBooks {
 
 func getMarketDepths(obs orderBooks) marketDepths {
 
-	intervals := conf.MarketDepthIntervals
+	intervals := conf.MarketDepths.Intervals
 
 	mds := make(marketDepths, len(obs))
 
@@ -317,26 +245,20 @@ func getMarketDepths(obs orderBooks) marketDepths {
 	return mds
 }
 
-func prepareMarketDepthsPoints(mds marketDepths,
-	previousStarts map[string]time.Time, exchange string) {
+func prepareMarketDepthsPoints(ind *indicator, mds marketDepths) {
 
-	measurement := conf.Schema["market_depths_measurement"]
+	measurement := ind.destination
+	timestamp := time.Unix(0, ind.nextRun)
+	points := make([]*ifxClient.Point, 0, len(mds)*2)
 
 	for market, md := range mds {
 
-		baseTimestamp, ok := previousStarts["allMarkets"]
-		if !ok {
-			baseTimestamp = previousStarts[market]
-		}
-
-		points := make([]*ifxClient.Point, 0, len(mds)*2)
-
 		tags := map[string]string{
 			"market":   market,
-			"exchange": exchange,
+			"exchange": ind.dataSource.Schema["database"],
 		}
 
-		for _, interval := range conf.MarketDepthIntervals {
+		for _, interval := range conf.MarketDepths.Intervals {
 
 			tags["interval"] = strconv.FormatFloat(interval, 'f', 2, 64)
 
@@ -345,17 +267,46 @@ func prepareMarketDepthsPoints(mds marketDepths,
 				"ask_depth": md.asksDepth[interval],
 			}
 
-			pt, err := ifxClient.NewPoint(measurement, tags, fields, baseTimestamp)
+			pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
 			if err != nil {
 				logger.WithField("error", err).Error(
 					"prepareMarketDepthsPoints: ifxClient.NewPoint")
 			}
 			points = append(points, pt)
 		}
-
-		batchsToWrite <- &database.BatchPoints{
-			exchange + "MarketDepth",
-			points,
-		}
 	}
+
+	if len(points) == 0 {
+		return
+	}
+
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: ind.dataSource.Schema["database"] + "MarketDepth",
+		Points:    points,
+	}
+}
+
+func printOrderBook(orderBook *orderBook, limit int) {
+
+	line := "\nBids\t\t\t\tAsks\n"
+	line += "Rate\t\tAmount\t\tRate\t\tAmount\n"
+
+	for i := 0; (i < len(orderBook.bids) || i < len(orderBook.asks)) &&
+		i < limit; i++ {
+
+		if i < len(orderBook.bids) {
+			line += fmt.Sprintf("%.8f\t%.8f",
+				orderBook.bids[i].rate, orderBook.bids[i].quantity)
+		} else {
+			line += "\t\t\t"
+		}
+
+		if i < len(orderBook.asks) {
+			line += fmt.Sprintf("\t%.8f\t%.8f",
+				orderBook.asks[i].rate, orderBook.asks[i].quantity)
+		}
+		line += "\n"
+	}
+
+	logger.Warn(line)
 }
