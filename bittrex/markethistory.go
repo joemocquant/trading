@@ -95,7 +95,10 @@ func prepareMarketHistoryPoints(marketName string,
 		return
 	}
 
-	batchsToWrite <- &database.BatchPoints{"marketHistory", points}
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: "marketHistory",
+		Points:    points,
+	}
 }
 
 func getLastTrade(marketName string) *publicapi.Trade {

@@ -106,7 +106,10 @@ func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, market string) {
 
 				points = append(points, pt)
 			}
-			batchsToWrite <- &database.BatchPoints{"market", points}
+			batchsToWrite <- &database.BatchPoints{
+				TypePoint: "market",
+				Points:    points,
+			}
 
 		}(marketUpdates)
 

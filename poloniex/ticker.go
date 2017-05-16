@@ -55,7 +55,10 @@ func ingestPublicTicks() {
 		points = append(points, pt)
 	}
 
-	batchsToWrite <- &database.BatchPoints{"tick", points}
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: "tick",
+		Points:    points,
+	}
 }
 
 func preparePublicTickPoint(market string,
@@ -122,8 +125,8 @@ func ingestPushTicks() {
 			}
 
 			batchsToWrite <- &database.BatchPoints{
-				"tick",
-				[]*ifxClient.Point{pt},
+				TypePoint: "tick",
+				Points:    []*ifxClient.Point{pt},
 			}
 
 		}(tick)

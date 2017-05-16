@@ -36,7 +36,7 @@
         "trades_measurement": "market_histories",
         "book_orders_measurement": "book_orders",
         "book_orders_last_check_measurement": "book_orders_last_check",
-        "market_summaries_measurement": "market_summaries"
+        "ticks_measurement": "market_summaries"
       },
       "market_summaries_check_period_sec": 15,
       "markets_check_period_min": 5,

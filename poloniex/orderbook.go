@@ -74,6 +74,7 @@ func prepareOrderBookPoints(market string,
 				"sequence":       sequence,
 				"rate":           order.Rate,
 				"quantity":       order.Quantity,
+				"total":          order.Rate * order.Quantity,
 				"cumulative_sum": cumulativeSum,
 			}
 
@@ -92,7 +93,10 @@ func prepareOrderBookPoints(market string,
 
 	processOrderBookPoints("ask", orderBook.Asks, orderBook.Seq)
 	processOrderBookPoints("bid", orderBook.Bids, orderBook.Seq)
-	batchsToWrite <- &database.BatchPoints{"orderBook", points}
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: "orderBook",
+		Points:    points,
+	}
 }
 
 func prepareLastOrderBookCheckPoints(orderBooks publicapi.OrderBooks,
@@ -125,7 +129,7 @@ func prepareLastOrderBookCheckPoints(orderBooks publicapi.OrderBooks,
 	}
 
 	batchsToWrite <- &database.BatchPoints{
-		"orderBookLastCheck",
-		points,
+		TypePoint: "orderBookLastCheck",
+		Points:    points,
 	}
 }

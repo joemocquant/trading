@@ -24,12 +24,12 @@ var (
 )
 
 type configuration struct {
-	ingestionConf `json:"ingestion"`
+	*ingestionConf `json:"ingestion"`
 }
 
 type ingestionConf struct {
-	LogLevel    string `json:"log_level"`
-	bittrexConf `json:"bittrex"`
+	LogLevel     string `json:"log_level"`
+	*bittrexConf `json:"bittrex"`
 }
 
 type bittrexConf struct {

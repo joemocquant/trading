@@ -1,13 +1,13 @@
 package poloniex
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 	"trading/api/poloniex/publicapi"
 	"trading/networking"
 	"trading/networking/database"
 
+	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
@@ -16,24 +16,20 @@ func ingestMissingTrades() {
 	// checking missing trades periodically
 	period := time.Duration(conf.MissingTradesCheckPeriodSec) * time.Second
 
-	for {
-		end := time.Now()
-		start := end.Add(-2 * period)
+	go networking.RunEvery(period, func(nextRun int64) {
 
-		go func(start, end time.Time) {
+		start := time.Unix(0, nextRun)
+		end := time.Unix(0, nextRun-int64(period))
 
-			res := getLastIngestedTrades(start, end)
-			if res == nil {
-				return
-			}
+		res := getLastIngestedTrades(start, end)
+		if res == nil {
+			return
+		}
 
-			missingTradeIds := getMissingTradeIds(res)
-			updateMissingTrades(missingTradeIds, start, end)
+		missingTradeIds := getMissingTradeIds(res)
+		updateMissingTrades(missingTradeIds, start, end)
 
-		}(start, end)
-
-		<-time.After(period)
-	}
+	})
 }
 
 func getLastIngestedTrades(start, end time.Time) []ifxClient.Result {
@@ -75,10 +71,12 @@ func getMissingTradeIds(
 
 		for _, record := range serie.Values {
 
-			tradeId, err := record[1].(json.Number).Int64()
+			tradeId, err := networking.ConvertJsonValueToInt64(record[1])
 			if err != nil {
-				logger.Errorf("getMissingTradeIds: Wrong tradeId type: %v (%s)",
-					tradeId, market)
+				logger.WithFields(logrus.Fields{
+					"error":  err,
+					"market": market,
+				}).Error("getMissingTradeIds: networking.ConvertJsonValueToInt64")
 				continue
 			}
 
@@ -169,5 +167,8 @@ func prepareMissingTradePoints(market string, mt []*publicapi.Trade) {
 		points = append(points, pt)
 	}
 
-	batchsToWrite <- &database.BatchPoints{"missingTrade", points}
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: "missingTrade",
+		Points:    points,
+	}
 }

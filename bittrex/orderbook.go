@@ -92,7 +92,10 @@ func prepareOrderBookPoints(market string, orderBook *publicapi.OrderBook,
 
 	processOrderBookPoints("ask", orderBook.Sell)
 	processOrderBookPoints("bid", orderBook.Buy)
-	batchsToWrite <- &database.BatchPoints{"orderBook", points}
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: "orderBook",
+		Points:    points,
+	}
 }
 
 func prepareLastOrderBookCheckPoint(market string,
@@ -118,7 +121,7 @@ func prepareLastOrderBookCheckPoint(market string,
 	}
 
 	batchsToWrite <- &database.BatchPoints{
-		"orderBookLastCheck",
-		[]*ifxClient.Point{point},
+		TypePoint: "orderBookLastCheck",
+		Points:    []*ifxClient.Point{point},
 	}
 }

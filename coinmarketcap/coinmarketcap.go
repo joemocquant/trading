@@ -19,12 +19,12 @@ var (
 )
 
 type configuration struct {
-	ingestionConf `json:"ingestion"`
+	*ingestionConf `json:"ingestion"`
 }
 
 type ingestionConf struct {
-	LogLevel          string `json:"log_level"`
-	coinmarketcapConf `json:"coinmarketcap"`
+	LogLevel           string `json:"log_level"`
+	*coinmarketcapConf `json:"coinmarketcap"`
 }
 
 type coinmarketcapConf struct {

@@ -47,7 +47,10 @@ func ingestMarketSummaries() {
 				points = append(points, pt)
 			}
 
-			batchsToWrite <- &database.BatchPoints{"marketSummary", points}
+			batchsToWrite <- &database.BatchPoints{
+				TypePoint: "marketSummary",
+				Points:    points,
+			}
 		}()
 
 		<-time.After(period)
@@ -57,7 +60,7 @@ func ingestMarketSummaries() {
 func prepareMarketSummaryPoint(
 	ms *publicapi.MarketSummary) (*ifxClient.Point, error) {
 
-	measurement := conf.Schema["market_summaries_measurement"]
+	measurement := conf.Schema["ticks_measurement"]
 	timestamp := time.Unix(ms.TimeStamp, 0)
 
 	tags := map[string]string{
