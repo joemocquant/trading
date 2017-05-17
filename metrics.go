@@ -61,13 +61,28 @@ type exchangeConf struct {
 type indicators map[string]*indicator
 
 type indicator struct {
-	period      time.Duration
-	indexPeriod int
-	dataSource  *exchangeConf
-	source      string
-	destination string
-	nextRun     int64
-	callback    func()
+	period        time.Duration
+	indexPeriod   int
+	dataSource    *exchangeConf
+	source        string
+	destination   string
+	nextRun       int64
+	callback      func()
+	timeIntervals []time.Time
+}
+
+func (ind *indicator) computeTimeIntervals() {
+
+	delta := ind.nextRun % int64(ind.period)
+	start := int64(ind.nextRun) - delta - 2*int64(ind.period)
+	end := ind.nextRun
+
+	var timeIntervals []time.Time
+	for s := start; s < end; s += int64(ind.period) {
+		timeIntervals = append(timeIntervals, time.Unix(0, s))
+	}
+
+	ind.timeIntervals = timeIntervals
 }
 
 func init() {

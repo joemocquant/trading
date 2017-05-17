@@ -9,17 +9,17 @@ import (
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
-func computeOHLC(from *indicator) {
+func computeSMA(from *indicator) {
 
 	indexPeriod := from.indexPeriod + 1
 
-	if len(conf.Ohlc.Periods) <= indexPeriod {
+	if len(conf.Sma.Periods) <= indexPeriod {
 		return
 	}
 
-	p, err := time.ParseDuration(conf.Ohlc.Periods[indexPeriod])
+	p, err := time.ParseDuration(conf.Sma.Periods[indexPeriod])
 	if err != nil {
-		logger.WithField("error", err).Fatal("computeOHLC: time.ParseDuration")
+		logger.WithField("error", err).Fatal("computeSMA: time.ParseDuration")
 	}
 
 	ind := &indicator{
@@ -27,34 +27,30 @@ func computeOHLC(from *indicator) {
 		period:      p,
 		indexPeriod: indexPeriod,
 		dataSource:  from.dataSource,
-		source:      "ohlc_" + conf.Ohlc.Periods[indexPeriod-1],
-		destination: "ohlc_" + conf.Ohlc.Periods[indexPeriod],
+		source:      "sma_" + conf.Sma.Periods[indexPeriod-1],
+		destination: "sma_" + conf.Sma.Periods[indexPeriod],
 	}
 
 	ind.callback = func() {
-		computeOHLC(ind)
+		computeSMA(ind)
 	}
 
 	ind.computeTimeIntervals()
 
-	res := getOHLC(ind)
+	res := getSMA(ind)
 	if res == nil {
 		return
 	}
 
-	mohlcs := formatOHLC(ind, res)
-	prepareOHLCPoints(ind, mohlcs)
+	msmas := formatSMA(ind, res)
+	prepareSMAPoints(ind, msmas)
 }
 
-func getOHLC(ind *indicator) []ifxClient.Result {
+func getSMA(ind *indicator) []ifxClient.Result {
 
 	query := fmt.Sprintf(
-		`SELECT SUM(volume) AS volume,
-      SUM(quantity) AS quantity,
-      FIRST(open) AS open,
-      MAX(high) AS high,
-      MIN(low) AS low,
-      LAST(close) AS close
+		`SELECT SUM(sum_close),
+      COUNT(count_close)
     FROM %s
     WHERE time >= %d AND time < %d AND exchange = '%s'
     GROUP BY time(%s), market;`,

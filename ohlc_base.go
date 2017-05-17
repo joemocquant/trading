@@ -30,7 +30,7 @@ func computeBaseOHLC() {
 
 	frequency, err := time.ParseDuration(conf.Ohlc.Frequency)
 	if err != nil {
-		logger.WithField("error", err).Fatal("getBaseOHLC: time.ParseDuration")
+		logger.WithField("error", err).Fatal("computeBaseOHLC: time.ParseDuration")
 	}
 
 	getBaseOHLC(&indicator{
@@ -55,25 +55,24 @@ func getBaseOHLC(ind *indicator, frequency time.Duration) {
 		ind.nextRun = nextRun
 
 		ind.callback = func() {
-			computeOHLC(ind)
+			go computeOHLC(ind)
+			go computeBaseSMA(ind)
 		}
+
+		ind.computeTimeIntervals()
 
 		res := getOHLCFromTrades(ind)
 		if res == nil {
 			return
 		}
 
-		mohlcs := formatOHLCs(ind, res)
-		addLastsIfNoVolume(ind, res, mohlcs)
+		mohlcs := formatOHLC(ind, res)
+		addLastIfNoVolume(ind, res, mohlcs)
 		prepareOHLCPoints(ind, mohlcs)
 	})
 }
 
 func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
-
-	delta := ind.nextRun % int64(ind.period)
-	start := int64(ind.nextRun) - delta - 2*int64(ind.period)
-	end := ind.nextRun
 
 	subQuery1 := fmt.Sprintf(
 		`SELECT SUM(total) AS volume,
@@ -86,7 +85,7 @@ func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
     WHERE time >= %d AND time < %d
     GROUP BY time(%s), market;`,
 		ind.dataSource.Schema["trades_measurement"],
-		start, end,
+		ind.timeIntervals[0].UnixNano(), ind.nextRun,
 		ind.period)
 
 	subQuery2 := fmt.Sprintf(
@@ -120,7 +119,7 @@ func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
 	return res
 }
 
-func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
+func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 
 	ohlcs := make(map[string][]*ohlc, len(res[0].Series))
 
@@ -128,20 +127,34 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 
 		market := serie.Tags["market"]
 
-		for _, ohlcRec := range serie.Values {
+		for i, ohlcRec := range serie.Values {
 
 			timestamp, err := networking.ConvertJsonValueToTime(ohlcRec[0])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToTime")
-				continue
+				}).Error("formatOHLC: networking.ConvertJsonValueToTime")
+
+				timestamp = ind.timeIntervals[i]
 			}
 
-			if ohlcRec[0] == nil || ohlcRec[1] == nil || ohlcRec[2] == nil ||
-				ohlcRec[3] == nil || ohlcRec[4] == nil || ohlcRec[5] == nil ||
-				ohlcRec[6] == nil {
+			if ohlcRec[1] == nil && ohlcRec[2] == nil && ohlcRec[3] == nil &&
+				ohlcRec[4] == nil && ohlcRec[5] == nil && ohlcRec[6] == nil {
+
+				if len(ohlcs[market]) != 0 {
+
+					ohlcs[market] = append(ohlcs[market], &ohlc{
+						timestamp:       timestamp,
+						volume:          0.0,
+						quantity:        0.0,
+						weightedAverage: 0.0,
+						open:            ohlcs[market][len(ohlcs[market])-1].open,
+						high:            ohlcs[market][len(ohlcs[market])-1].high,
+						low:             ohlcs[market][len(ohlcs[market])-1].low,
+						close:           ohlcs[market][len(ohlcs[market])-1].close,
+					})
+				}
 				continue
 			}
 
@@ -150,7 +163,7 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToFloat64")
+				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
 
@@ -159,7 +172,7 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToFloat64")
+				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
 
@@ -173,7 +186,7 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToFloat64")
+				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
 
@@ -182,7 +195,7 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToFloat64")
+				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
 
@@ -191,7 +204,7 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToFloat64")
+				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
 
@@ -200,7 +213,7 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				logger.WithFields(logrus.Fields{
 					"error":  err,
 					"market": market,
-				}).Error("formatOHLCs: networking.ConvertJsonValueToFloat64")
+				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
 
@@ -220,28 +233,27 @@ func formatOHLCs(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 	return ohlcs
 }
 
-func addLastsIfNoVolume(ind *indicator, res []ifxClient.Result,
-	ohlcs map[string][]*ohlc) {
+func addLastIfNoVolume(ind *indicator, res []ifxClient.Result,
+	mohlcs map[string][]*ohlc) {
 
 	lasts := formatLasts(res)
-	delta := ind.nextRun % int64(ind.period)
-
-	timestamp := time.Unix(0, ind.nextRun-delta-int64(ind.period))
+	timestamp := ind.timeIntervals[len(ind.timeIntervals)-1]
 
 	for market, last := range lasts {
 
-		if _, ok := ohlcs[market]; !ok {
+		defaultOHLC := &ohlc{
+			timestamp:       timestamp,
+			volume:          0.0,
+			quantity:        0.0,
+			weightedAverage: 0.0,
+			open:            last,
+			high:            last,
+			low:             last,
+			close:           last,
+		}
 
-			ohlcs[market] = append(ohlcs[market], &ohlc{
-				timestamp:       timestamp,
-				volume:          0.0,
-				quantity:        0.0,
-				weightedAverage: 0.0,
-				open:            last,
-				high:            last,
-				low:             last,
-				close:           last,
-			})
+		if _, ok := mohlcs[market]; !ok {
+			mohlcs[market] = append(mohlcs[market], defaultOHLC)
 		}
 	}
 }
