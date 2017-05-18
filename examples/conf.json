@@ -16,22 +16,15 @@
     "flush_batchs_period_ms": 200,
     "flush_capacity": 5000,
 
+    "frequency": "10s",
+    "periods": ["30s", "1m", "5m", "15m", "30m", "1h", "6h", "24h", "168h"],
+
     "market_depths": {
       "intervals":[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,  11, 12, 13,
         14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
         28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40],
       "frequency": "20s",
       "poloniex_hard_fetch_frequency": 3
-    },
-
-    "ohlc": {
-      "periods": ["30s", "1m", "5m", "15m", "30m", "1h", "6h", "24h", "168h"],
-      "frequency": "10s"
-    },
-
-    "sma": {
-      "periods": ["30s", "1m", "5m", "15m", "30m", "1h", "6h", "24h", "168h"],
-      "frequency": "10s"
     },
 
     "schema": {
@@ -48,7 +41,8 @@
           "trades_measurement": "trade_updates",
           "book_updates_measurement": "book_updates",
           "ticks_measurement": "ticks"
-        }
+        },
+        "update_lag": "1m"
       },
 
       "bittrex": {
@@ -58,7 +52,8 @@
           "book_orders_last_check_measurement": "book_orders_last_check",
           "trades_measurement": "market_histories",
           "ticks_measurement": "market_summaries"
-        }
+        },
+        "update_lag": "30s"
       }
     }
   }

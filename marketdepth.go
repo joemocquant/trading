@@ -36,22 +36,20 @@ type marketDepth struct {
 
 func computeMarketDepths() {
 
-	f, err := time.ParseDuration(conf.MarketDepths.Frequency)
+	f, err := time.ParseDuration(conf.Metrics.MarketDepths.Frequency)
 	if err != nil {
 		logger.WithField("error", err).Fatal(
 			"computeMarketDepths: time.ParseDuration")
 	}
 
 	computeMarketDepthsBittrex(&indicator{
-		period:      f,
-		dataSource:  conf.Sources.Bittrex,
-		destination: conf.Schema["market_depths_measurement"],
+		period:     f,
+		dataSource: conf.Metrics.Sources.Bittrex,
 	})
 
 	computeMarketDepthsPoloniex(&indicator{
-		period:      f,
-		dataSource:  conf.Sources.Poloniex,
-		destination: conf.Schema["market_depths_measurement"],
+		period:     f,
+		dataSource: conf.Metrics.Sources.Poloniex,
 	})
 }
 
@@ -77,7 +75,7 @@ func computeMarketDepthsPoloniex(ind *indicator) {
 
 		ind.nextRun = nextRun
 
-		if i%conf.MarketDepths.PoloniexHardFetchFrequency == 0 {
+		if i%conf.Metrics.MarketDepths.PoloniexHardFetchFrequency == 0 {
 			obs = getLastOrderBooksPoloniex(ind, nil)
 			i = 0
 		}
@@ -178,7 +176,7 @@ func formatOrderBooks(res []ifxClient.Result) orderBooks {
 
 func getMarketDepths(obs orderBooks) marketDepths {
 
-	intervals := conf.MarketDepths.Intervals
+	intervals := conf.Metrics.MarketDepths.Intervals
 
 	mds := make(marketDepths, len(obs))
 
@@ -247,7 +245,7 @@ func getMarketDepths(obs orderBooks) marketDepths {
 
 func prepareMarketDepthsPoints(ind *indicator, mds marketDepths) {
 
-	measurement := ind.destination
+	measurement := conf.Metrics.Schema["market_depths_measurement"]
 	timestamp := time.Unix(0, ind.nextRun)
 	points := make([]*ifxClient.Point, 0, len(mds)*2)
 
@@ -258,7 +256,7 @@ func prepareMarketDepthsPoints(ind *indicator, mds marketDepths) {
 			"exchange": ind.dataSource.Schema["database"],
 		}
 
-		for _, interval := range conf.MarketDepths.Intervals {
+		for _, interval := range conf.Metrics.MarketDepths.Intervals {
 
 			tags["interval"] = strconv.FormatFloat(interval, 'f', 2, 64)
 

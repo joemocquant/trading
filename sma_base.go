@@ -19,27 +19,20 @@ type sma struct {
 
 func computeBaseSMA(from *indicator) {
 
-	period, err := time.ParseDuration(conf.Sma.Periods[0])
-	if err != nil {
-		logger.WithField("error", err).Fatal("computeBaseSMA: time.ParseDuration")
-	}
-
-	frequency, err := time.ParseDuration(conf.Sma.Frequency)
-	if err != nil {
-		logger.WithField("error", err).Fatal("computeBaseSMA: time.ParseDuration")
-	}
+	indexPeriod := 0
 
 	getBaseSMA(&indicator{
 		nextRun:     from.nextRun,
-		period:      period,
-		indexPeriod: 0,
+		period:      conf.Metrics.Periods[indexPeriod],
+		indexPeriod: indexPeriod,
 		dataSource:  from.dataSource,
 		source:      from.destination,
-		destination: "sma_" + conf.Sma.Periods[0],
-	}, frequency)
+		destination: "sma_" + conf.Metrics.PeriodsStr[indexPeriod],
+		exchange:    from.exchange,
+	})
 }
 
-func getBaseSMA(ind *indicator, frequency time.Duration) {
+func getBaseSMA(ind *indicator) {
 
 	ind.callback = func() {
 		computeSMA(ind)
@@ -66,14 +59,14 @@ func getSMAFromOHLC(ind *indicator) []ifxClient.Result {
     GROUP BY time(%s), market;`,
 		ind.source,
 		ind.timeIntervals[0].UnixNano(), ind.nextRun,
-		ind.dataSource.Schema["database"],
+		ind.exchange,
 		ind.period)
 
 	var res []ifxClient.Result
 
 	request := func() (err error) {
 		res, err = database.QueryDB(
-			dbClient, query, conf.Schema["database"])
+			dbClient, query, conf.Metrics.Schema["database"])
 		return err
 	}
 
@@ -104,32 +97,25 @@ func formatSMA(ind *indicator, res []ifxClient.Result) map[string][]*sma {
 			timestamp, err := networking.ConvertJsonValueToTime(smaRec[0])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToTime")
 
 				timestamp = ind.timeIntervals[i]
 			}
 
-			if smaRec[1] == nil {
-
-				if len(smas[market]) != 0 {
-
-					smas[market] = append(smas[market], &sma{
-						timestamp: timestamp,
-						count:     0.0,
-						sum:       0.0,
-						sma:       smas[market][len(smas[market])-1].sma,
-					})
-				}
+			if smaRec[1] == nil || smaRec[2] == nil {
+				logger.WithField("error", "Encountered nil value").Errorf("formatSMA %s %#v", market, smaRec)
 				continue
 			}
 
 			sum, err := networking.ConvertJsonValueToFloat64(smaRec[1])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatSMA: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -137,8 +123,9 @@ func formatSMA(ind *indicator, res []ifxClient.Result) map[string][]*sma {
 			count, err := networking.ConvertJsonValueToInt64(smaRec[2])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatSMA: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -173,7 +160,7 @@ func prepareSMAPoints(ind *indicator, msmas map[string][]*sma) {
 
 			tags := map[string]string{
 				"market":   market,
-				"exchange": ind.dataSource.Schema["database"],
+				"exchange": ind.exchange,
 			}
 
 			fields := map[string]interface{}{

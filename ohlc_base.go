@@ -23,40 +23,35 @@ type ohlc struct {
 
 func computeBaseOHLC() {
 
-	period, err := time.ParseDuration(conf.Ohlc.Periods[0])
-	if err != nil {
-		logger.WithField("error", err).Fatal("computeBaseOHLC: time.ParseDuration")
-	}
-
-	frequency, err := time.ParseDuration(conf.Ohlc.Frequency)
-	if err != nil {
-		logger.WithField("error", err).Fatal("computeBaseOHLC: time.ParseDuration")
-	}
+	indexPeriod := 0
 
 	getBaseOHLC(&indicator{
-		period:      period,
-		indexPeriod: 0,
-		dataSource:  conf.Sources.Bittrex,
-		destination: "ohlc_" + conf.Ohlc.Periods[0],
-	}, frequency)
+		indexPeriod: indexPeriod,
+		period:      conf.Metrics.Periods[indexPeriod],
+		dataSource:  conf.Metrics.Sources.Bittrex,
+		destination: "ohlc_" + conf.Metrics.PeriodsStr[indexPeriod],
+		exchange:    conf.Metrics.Sources.Bittrex.Schema["database"],
+	})
 
 	getBaseOHLC(&indicator{
-		period:      period,
-		indexPeriod: 0,
-		dataSource:  conf.Sources.Poloniex,
-		destination: "ohlc_" + conf.Ohlc.Periods[0],
-	}, frequency)
+		indexPeriod: indexPeriod,
+		period:      conf.Metrics.Periods[indexPeriod],
+		dataSource:  conf.Metrics.Sources.Poloniex,
+		destination: "ohlc_" + conf.Metrics.PeriodsStr[indexPeriod],
+		exchange:    conf.Metrics.Sources.Poloniex.Schema["database"],
+	})
 }
 
-func getBaseOHLC(ind *indicator, frequency time.Duration) {
+func getBaseOHLC(ind *indicator) {
 
-	go networking.RunEvery(frequency, func(nextRun int64) {
+	go networking.RunEvery(conf.Metrics.Frequency, func(nextRun int64) {
 
 		ind.nextRun = nextRun
 
 		ind.callback = func() {
 			go computeOHLC(ind)
 			go computeBaseSMA(ind)
+			go computeBaseOBV(ind)
 		}
 
 		ind.computeTimeIntervals()
@@ -91,12 +86,13 @@ func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
 	subQuery2 := fmt.Sprintf(
 		`SELECT last
     FROM %s
-    WHERE time >= now() - 6h
+    WHERE time >= now() - 1h
     GROUP BY market
     ORDER BY time LIMIT 1`,
 		ind.dataSource.Schema["ticks_measurement"])
 
 	query := subQuery1 + subQuery2
+
 	var res []ifxClient.Result
 
 	request := func() (err error) {
@@ -132,37 +128,25 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 			timestamp, err := networking.ConvertJsonValueToTime(ohlcRec[0])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToTime")
 
 				timestamp = ind.timeIntervals[i]
 			}
 
-			if ohlcRec[1] == nil && ohlcRec[2] == nil && ohlcRec[3] == nil &&
-				ohlcRec[4] == nil && ohlcRec[5] == nil && ohlcRec[6] == nil {
-
-				if len(ohlcs[market]) != 0 {
-
-					ohlcs[market] = append(ohlcs[market], &ohlc{
-						timestamp:       timestamp,
-						volume:          0.0,
-						quantity:        0.0,
-						weightedAverage: 0.0,
-						open:            ohlcs[market][len(ohlcs[market])-1].open,
-						high:            ohlcs[market][len(ohlcs[market])-1].high,
-						low:             ohlcs[market][len(ohlcs[market])-1].low,
-						close:           ohlcs[market][len(ohlcs[market])-1].close,
-					})
-				}
+			if ohlcRec[1] == nil || ohlcRec[2] == nil || ohlcRec[3] == nil ||
+				ohlcRec[4] == nil || ohlcRec[5] == nil || ohlcRec[6] == nil {
 				continue
 			}
 
 			volume, err := networking.ConvertJsonValueToFloat64(ohlcRec[1])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -170,8 +154,9 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 			quantity, err := networking.ConvertJsonValueToFloat64(ohlcRec[2])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -184,8 +169,9 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 			open, err := networking.ConvertJsonValueToFloat64(ohlcRec[3])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -193,8 +179,9 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 			high, err := networking.ConvertJsonValueToFloat64(ohlcRec[4])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -202,8 +189,9 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 			low, err := networking.ConvertJsonValueToFloat64(ohlcRec[5])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -211,8 +199,9 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 			close, err := networking.ConvertJsonValueToFloat64(ohlcRec[6])
 			if err != nil {
 				logger.WithFields(logrus.Fields{
-					"error":  err,
-					"market": market,
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToFloat64")
 				continue
 			}
@@ -237,30 +226,55 @@ func addLastIfNoVolume(ind *indicator, res []ifxClient.Result,
 	mohlcs map[string][]*ohlc) {
 
 	lasts := formatLasts(res)
-	timestamp := ind.timeIntervals[len(ind.timeIntervals)-1]
 
 	for market, last := range lasts {
 
-		defaultOHLC := &ohlc{
-			timestamp:       timestamp,
-			volume:          0.0,
-			quantity:        0.0,
-			weightedAverage: 0.0,
-			open:            last,
-			high:            last,
-			low:             last,
-			close:           last,
-		}
-
 		if _, ok := mohlcs[market]; !ok {
-			mohlcs[market] = append(mohlcs[market], defaultOHLC)
+
+			for _, interval := range ind.timeIntervals {
+				mohlcs[market] = append(mohlcs[market], &ohlc{
+					interval, 0.0, 0.0, 0.0, last, last, last, last,
+				})
+			}
+		} else {
+
+			i := 0
+			for _, interval := range ind.timeIntervals {
+
+				for _, ohlcRec := range mohlcs[market][i:] {
+
+					if interval.Equal(ohlcRec.timestamp) {
+						last = ohlcRec.close
+						i++
+						break
+					}
+
+					if interval.Before(ohlcRec.timestamp) {
+
+						mohlcs[market] = append(mohlcs[market], nil)
+						copy(mohlcs[market][i+1:], mohlcs[market][i:])
+
+						mohlcs[market][i] = &ohlc{
+							interval, 0.0, 0.0, 0.0, last, last, last, last,
+						}
+						i++
+						break
+					}
+				}
+
+				if interval.After(mohlcs[market][len(mohlcs[market])-1].timestamp) {
+					mohlcs[market] = append(mohlcs[market], &ohlc{
+						interval, 0.0, 0.0, 0.0, last, last, last, last,
+					})
+				}
+			}
 		}
 	}
 }
 
 func formatLasts(res []ifxClient.Result) map[string]float64 {
 
-	lasts := make(map[string]float64, len(res[1].Series))
+	lastTicks := make(map[string]float64, len(res[1].Series))
 
 	for _, serie := range res[1].Series {
 
@@ -269,16 +283,15 @@ func formatLasts(res []ifxClient.Result) map[string]float64 {
 		last, err := networking.ConvertJsonValueToFloat64(serie.Values[0][1])
 		if err != nil {
 			logger.WithFields(logrus.Fields{
-				"error":  err,
-				"market": market,
+				"error": err,
 			}).Error("formatLasts: networking.ConvertJsonValueToFloat64")
 			continue
 		}
 
-		lasts[market] = last
+		lastTicks[market] = last
 	}
 
-	return lasts
+	return lastTicks
 }
 
 func prepareOHLCPoints(ind *indicator, mohlcs map[string][]*ohlc) {
@@ -294,7 +307,7 @@ func prepareOHLCPoints(ind *indicator, mohlcs map[string][]*ohlc) {
 
 			tags := map[string]string{
 				"market":   market,
-				"exchange": ind.dataSource.Schema["database"],
+				"exchange": ind.exchange,
 			}
 
 			fields := map[string]interface{}{

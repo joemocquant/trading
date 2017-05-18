@@ -2,7 +2,9 @@ package metrics
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"math"
 	"time"
 	"trading/networking/database"
 
@@ -19,7 +21,7 @@ var (
 )
 
 type configuration struct {
-	metricsConf `json:"metrics"`
+	Metrics *metricsConf `json:"metrics"`
 }
 
 type metricsConf struct {
@@ -27,9 +29,10 @@ type metricsConf struct {
 	Schema              map[string]string `json:"schema"`
 	FlushBatchsPeriodMs int               `json:"flush_batchs_period_ms"`
 	FlushCapacity       int               `json:"flush_capacity"`
+	Frequency           time.Duration
+	PeriodsStr          []string `json:"periods"`
+	Periods             []time.Duration
 	MarketDepths        *marketDepthsConf `json:"market_depths"`
-	Ohlc                *ohlcConf         `json:"ohlc"`
-	Sma                 *smaConf          `json:"sma"`
 	Sources             *sources          `json:"sources"`
 }
 
@@ -39,50 +42,28 @@ type marketDepthsConf struct {
 	PoloniexHardFetchFrequency int       `json:"poloniex_hard_fetch_frequency"`
 }
 
-type ohlcConf struct {
-	Periods   []string `json:"periods"`
-	Frequency string   `json:"frequency"`
-}
-
-type smaConf struct {
-	Periods   []string `json:"periods"`
-	Frequency string   `json:"frequency"`
-}
-
 type sources struct {
 	Poloniex *exchangeConf `json:"poloniex"`
 	Bittrex  *exchangeConf `json:"bittrex"`
 }
 
 type exchangeConf struct {
-	Schema map[string]string `json:"schema"`
+	Schema    map[string]string `json:"schema"`
+	UpdateLag time.Duration
 }
 
 type indicators map[string]*indicator
 
 type indicator struct {
+	nextRun       int64
 	period        time.Duration
 	indexPeriod   int
 	dataSource    *exchangeConf
 	source        string
 	destination   string
-	nextRun       int64
 	callback      func()
 	timeIntervals []time.Time
-}
-
-func (ind *indicator) computeTimeIntervals() {
-
-	delta := ind.nextRun % int64(ind.period)
-	start := int64(ind.nextRun) - delta - 2*int64(ind.period)
-	end := ind.nextRun
-
-	var timeIntervals []time.Time
-	for s := start; s < end; s += int64(ind.period) {
-		timeIntervals = append(timeIntervals, time.Unix(0, s))
-	}
-
-	ind.timeIntervals = timeIntervals
+	exchange      string
 }
 
 func init() {
@@ -105,7 +86,7 @@ func init() {
 		logger.WithField("error", err).Fatal("loading configuration")
 	}
 
-	switch conf.LogLevel {
+	switch conf.Metrics.LogLevel {
 	case "debug":
 		logrus.SetLevel(logrus.DebugLevel)
 	case "info":
@@ -126,19 +107,100 @@ func init() {
 		logger.WithField("error", err).Fatal("database.NewdbClient")
 	}
 
-	batchsToWrite = make(chan *database.BatchPoints, conf.FlushCapacity)
+	batchsToWrite = make(chan *database.BatchPoints, conf.Metrics.FlushCapacity)
 }
 
 func ComputeMetrics() {
 
 	// flushing batchs periodically
-	period := time.Duration(conf.FlushBatchsPeriodMs) * time.Millisecond
+	period := time.Duration(conf.Metrics.FlushBatchsPeriodMs) * time.Millisecond
+
 	go database.FlushEvery(period, &database.FlushInfo{
 		batchsToWrite,
-		conf.Schema["database"],
+		conf.Metrics.Schema["database"],
 		dbClient,
 	})
 
 	go computeMarketDepths()
 	go computeBaseOHLC()
+}
+
+func (e *exchangeConf) UnmarshalJSON(data []byte) error {
+
+	type alias exchangeConf
+	aux := struct {
+		UpdateLag string `json:"update_lag"`
+		*alias
+	}{
+		alias: (*alias)(e),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("json.Unmarshal: %v", err)
+	}
+
+	var err error
+
+	if e.UpdateLag, err = time.ParseDuration(aux.UpdateLag); err != nil {
+		return fmt.Errorf("time.ParseDuration: %v", err)
+	}
+
+	return nil
+}
+
+func (m *metricsConf) UnmarshalJSON(data []byte) error {
+
+	type alias metricsConf
+	aux := struct {
+		Frequency string `json:"frequency"`
+		*alias
+	}{
+		alias: (*alias)(m),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("json.Unmarshal: %v", err)
+	}
+
+	var err error
+
+	if m.Frequency, err = time.ParseDuration(aux.Frequency); err != nil {
+		return fmt.Errorf("time.ParseDuration: %v", err)
+	}
+
+	m.Periods = make([]time.Duration, len(m.PeriodsStr))
+	for i, p := range m.PeriodsStr {
+
+		period, err := time.ParseDuration(p)
+		if err != nil {
+			return fmt.Errorf("time.ParseDuration: %v", err)
+		}
+		m.Periods[i] = period
+	}
+
+	return nil
+}
+
+func (ind *indicator) computeTimeIntervals() {
+
+	var periodCount int64 = 0
+	delta := ind.nextRun % int64(ind.period)
+	lag := int64(ind.dataSource.UpdateLag)
+
+	if delta >= lag {
+		periodCount = 0
+
+	} else {
+		periodCount = int64(math.Ceil(float64(lag-delta) / float64(ind.period)))
+	}
+
+	start := int64(ind.nextRun) - delta - periodCount*int64(ind.period)
+	end := ind.nextRun
+
+	var timeIntervals []time.Time
+	for s := start; s <= end; s += int64(ind.period) {
+		timeIntervals = append(timeIntervals, time.Unix(0, s))
+	}
+
+	ind.timeIntervals = timeIntervals
 }

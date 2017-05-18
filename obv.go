@@ -8,7 +8,7 @@ import (
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
-func computeSMA(from *indicator) {
+func computeOBV(from *indicator) {
 
 	indexPeriod := from.indexPeriod + 1
 
@@ -21,36 +21,35 @@ func computeSMA(from *indicator) {
 		indexPeriod: indexPeriod,
 		period:      conf.Metrics.Periods[indexPeriod],
 		dataSource:  from.dataSource,
-		source:      "sma_" + conf.Metrics.PeriodsStr[from.indexPeriod],
-		destination: "sma_" + conf.Metrics.PeriodsStr[indexPeriod],
+		source:      "obv_" + conf.Metrics.PeriodsStr[from.indexPeriod],
+		destination: "obv_" + conf.Metrics.PeriodsStr[indexPeriod],
 		exchange:    from.exchange,
 	}
 
 	ind.callback = func() {
-		computeSMA(ind)
+		computeOBV(ind)
 	}
 
 	ind.computeTimeIntervals()
 
-	res := getSMA(ind)
+	res := getOBV(ind)
 	if res == nil {
 		return
 	}
 
-	msmas := formatSMA(ind, res)
-	prepareSMAPoints(ind, msmas)
+	mobvs := formatOBV(ind, res)
+	prepareOBVPoints(ind, mobvs)
 }
 
-func getSMA(ind *indicator) []ifxClient.Result {
+func getOBV(ind *indicator) []ifxClient.Result {
 
 	query := fmt.Sprintf(
-		`SELECT SUM(sum_close),
-      COUNT(count_close)
+		`SELECT SUM(obv)
     FROM %s
     WHERE time >= %d AND time < %d AND exchange = '%s'
     GROUP BY time(%s), market;`,
 		ind.source,
-		ind.timeIntervals[0].UnixNano(), ind.nextRun,
+		ind.timeIntervals[0].UnixNano()-int64(ind.period), ind.nextRun,
 		ind.exchange,
 		ind.period)
 

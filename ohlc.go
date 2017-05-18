@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"fmt"
-	"time"
 	"trading/networking"
 	"trading/networking/database"
 
@@ -13,22 +12,18 @@ func computeOHLC(from *indicator) {
 
 	indexPeriod := from.indexPeriod + 1
 
-	if len(conf.Ohlc.Periods) <= indexPeriod {
+	if len(conf.Metrics.Periods) <= indexPeriod {
 		return
-	}
-
-	p, err := time.ParseDuration(conf.Ohlc.Periods[indexPeriod])
-	if err != nil {
-		logger.WithField("error", err).Fatal("computeOHLC: time.ParseDuration")
 	}
 
 	ind := &indicator{
 		nextRun:     from.nextRun,
-		period:      p,
 		indexPeriod: indexPeriod,
+		period:      conf.Metrics.Periods[indexPeriod],
 		dataSource:  from.dataSource,
-		source:      "ohlc_" + conf.Ohlc.Periods[indexPeriod-1],
-		destination: "ohlc_" + conf.Ohlc.Periods[indexPeriod],
+		source:      "ohlc_" + conf.Metrics.PeriodsStr[from.indexPeriod],
+		destination: "ohlc_" + conf.Metrics.PeriodsStr[indexPeriod],
+		exchange:    from.exchange,
 	}
 
 	ind.callback = func() {
@@ -60,14 +55,14 @@ func getOHLC(ind *indicator) []ifxClient.Result {
     GROUP BY time(%s), market;`,
 		ind.source,
 		ind.timeIntervals[0].UnixNano(), ind.nextRun,
-		ind.dataSource.Schema["database"],
+		ind.exchange,
 		ind.period)
 
 	var res []ifxClient.Result
 
 	request := func() (err error) {
 		res, err = database.QueryDB(
-			dbClient, query, conf.Schema["database"])
+			dbClient, query, conf.Metrics.Schema["database"])
 		return err
 	}
 
