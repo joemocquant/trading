@@ -18,8 +18,8 @@ func ingestMissingTrades() {
 
 	go networking.RunEvery(period, func(nextRun int64) {
 
-		start := time.Unix(0, nextRun)
-		end := time.Unix(0, nextRun-int64(period))
+		end := time.Unix(0, nextRun)
+		start := time.Unix(0, nextRun-int64(period))
 
 		res := getLastIngestedTrades(start, end)
 		if res == nil {
@@ -34,14 +34,14 @@ func ingestMissingTrades() {
 
 func getLastIngestedTrades(start, end time.Time) []ifxClient.Result {
 
-	cmd := fmt.Sprintf(
+	query := fmt.Sprintf(
 		"SELECT trade_id FROM %s WHERE time >= %d AND time < %d GROUP BY market",
 		conf.Schema["trades_measurement"], start.UnixNano(), end.UnixNano())
 
 	var res []ifxClient.Result
 
 	request := func() (err error) {
-		res, err = database.QueryDB(dbClient, cmd, conf.Schema["database"])
+		res, err = database.QueryDB(dbClient, query, conf.Schema["database"])
 		return err
 	}
 
