@@ -19,15 +19,13 @@ type sma struct {
 
 func computeBaseSMA(from *indicator) {
 
-	indexPeriod := 0
-
 	getBaseSMA(&indicator{
 		nextRun:     from.nextRun,
-		period:      conf.Metrics.Periods[indexPeriod],
-		indexPeriod: indexPeriod,
+		period:      conf.Metrics.Periods[from.indexPeriod],
+		indexPeriod: from.indexPeriod,
 		dataSource:  from.dataSource,
 		source:      from.destination,
-		destination: "sma_" + conf.Metrics.PeriodsStr[indexPeriod],
+		destination: "sma_" + conf.Metrics.PeriodsStr[from.indexPeriod],
 		exchange:    from.exchange,
 	})
 }

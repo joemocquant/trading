@@ -17,15 +17,13 @@ type obv struct {
 
 func computeBaseOBV(from *indicator) {
 
-	indexPeriod := 0
-
 	getBaseOBV(&indicator{
 		nextRun:     from.nextRun,
-		period:      conf.Metrics.Periods[indexPeriod],
-		indexPeriod: indexPeriod,
+		period:      conf.Metrics.Periods[from.indexPeriod],
+		indexPeriod: from.indexPeriod,
 		dataSource:  from.dataSource,
 		source:      from.destination,
-		destination: "obv_" + conf.Metrics.PeriodsStr[indexPeriod],
+		destination: "obv_" + conf.Metrics.PeriodsStr[from.indexPeriod],
 		exchange:    from.exchange,
 	})
 }

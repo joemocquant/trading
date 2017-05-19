@@ -204,3 +204,31 @@ func (ind *indicator) computeTimeIntervals() {
 
 	ind.timeIntervals = timeIntervals
 }
+
+func applyMetrics(from, to time.Time, dataSources []*exchangeConf,
+	apply func(ind *indicator)) {
+
+	period := conf.Metrics.Periods[0]
+	fromDuration := from.UnixNano()
+	firstRun := fromDuration - (fromDuration % int64(period)) + int64(period)
+	sleep := 200 * time.Millisecond
+
+	for start := firstRun; start < to.UnixNano(); start += int64(period) {
+
+		for _, dataSource := range dataSources {
+
+			indFrom := &indicator{
+				nextRun:     start,
+				period:      period,
+				indexPeriod: 0,
+				dataSource:  dataSource,
+				destination: "ohlc_" + conf.Metrics.PeriodsStr[0],
+				exchange:    dataSource.Schema["database"],
+			}
+
+			apply(indFrom)
+			time.Sleep(sleep)
+		}
+
+	}
+}

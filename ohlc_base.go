@@ -19,6 +19,8 @@ type ohlc struct {
 	high            float64
 	low             float64
 	close           float64
+	change          float64
+	changePercent   float64
 }
 
 func computeBaseOHLC() {
@@ -206,6 +208,13 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				continue
 			}
 
+			change := close - open
+
+			changePercent := 0.0
+			if open != 0.0 {
+				changePercent = change * 100 / open
+			}
+
 			ohlcs[market] = append(ohlcs[market], &ohlc{
 				timestamp:       timestamp,
 				volume:          volume,
@@ -215,6 +224,8 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				high:            high,
 				low:             low,
 				close:           close,
+				change:          change,
+				changePercent:   changePercent,
 			})
 		}
 	}
@@ -233,7 +244,7 @@ func addLastIfNoVolume(ind *indicator, res []ifxClient.Result,
 
 			for _, interval := range ind.timeIntervals {
 				mohlcs[market] = append(mohlcs[market], &ohlc{
-					interval, 0.0, 0.0, 0.0, last, last, last, last,
+					interval, 0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
 				})
 			}
 		} else {
@@ -255,7 +266,7 @@ func addLastIfNoVolume(ind *indicator, res []ifxClient.Result,
 						copy(mohlcs[market][i+1:], mohlcs[market][i:])
 
 						mohlcs[market][i] = &ohlc{
-							interval, 0.0, 0.0, 0.0, last, last, last, last,
+							interval, 0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
 						}
 						i++
 						break
@@ -264,7 +275,7 @@ func addLastIfNoVolume(ind *indicator, res []ifxClient.Result,
 
 				if interval.After(mohlcs[market][len(mohlcs[market])-1].timestamp) {
 					mohlcs[market] = append(mohlcs[market], &ohlc{
-						interval, 0.0, 0.0, 0.0, last, last, last, last,
+						interval, 0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
 					})
 				}
 			}
@@ -318,6 +329,8 @@ func prepareOHLCPoints(ind *indicator, mohlcs map[string][]*ohlc) {
 				"high":             ohlc.high,
 				"low":              ohlc.low,
 				"close":            ohlc.close,
+				"change":           ohlc.change,
+				"change_percent":   ohlc.changePercent,
 			}
 
 			pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
