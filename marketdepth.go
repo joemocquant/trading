@@ -43,17 +43,19 @@ func computeMarketDepths() {
 	}
 
 	computeMarketDepthsBittrex(&indicator{
-		period:     f,
-		dataSource: conf.Metrics.Sources.Bittrex,
+		period:   f,
+		exchange: "bittrex",
 	})
 
 	computeMarketDepthsPoloniex(&indicator{
-		period:     f,
-		dataSource: conf.Metrics.Sources.Poloniex,
+		period:   f,
+		exchange: "poloniex",
 	})
 }
 
 func computeMarketDepthsBittrex(ind *indicator) {
+
+	ind.dataSource = conf.Metrics.Sources[ind.exchange]
 
 	go networking.RunEvery(ind.period, func(nextRun int64) {
 
@@ -67,6 +69,8 @@ func computeMarketDepthsBittrex(ind *indicator) {
 }
 
 func computeMarketDepthsPoloniex(ind *indicator) {
+
+	ind.dataSource = conf.Metrics.Sources[ind.exchange]
 
 	var obs orderBooks
 	i := 0
@@ -253,7 +257,7 @@ func prepareMarketDepthsPoints(ind *indicator, mds marketDepths) {
 
 		tags := map[string]string{
 			"market":   market,
-			"exchange": ind.dataSource.Schema["database"],
+			"exchange": ind.exchange,
 		}
 
 		for _, interval := range conf.Metrics.MarketDepths.Intervals {

@@ -11,7 +11,6 @@ import (
 )
 
 type ohlc struct {
-	timestamp       time.Time
 	volume          float64
 	quantity        float64
 	weightedAverage float64
@@ -29,22 +28,22 @@ func computeBaseOHLC() {
 
 	getBaseOHLC(&indicator{
 		indexPeriod: indexPeriod,
-		period:      conf.Metrics.Periods[indexPeriod],
-		dataSource:  conf.Metrics.Sources.Bittrex,
-		destination: "ohlc_" + conf.Metrics.PeriodsStr[indexPeriod],
-		exchange:    conf.Metrics.Sources.Bittrex.Schema["database"],
+		period:      conf.Metrics.OhlcPeriods[indexPeriod],
+		destination: "ohlc_" + conf.Metrics.OhlcPeriodsStr[indexPeriod],
+		exchange:    "bittrex",
 	})
 
-	getBaseOHLC(&indicator{
-		indexPeriod: indexPeriod,
-		period:      conf.Metrics.Periods[indexPeriod],
-		dataSource:  conf.Metrics.Sources.Poloniex,
-		destination: "ohlc_" + conf.Metrics.PeriodsStr[indexPeriod],
-		exchange:    conf.Metrics.Sources.Poloniex.Schema["database"],
-	})
+	// getBaseOHLC(&indicator{
+	// 	indexPeriod: indexPeriod,
+	// 	period:      conf.Metrics.OhlcPeriods[indexPeriod],
+	// 	destination: "ohlc_" + conf.Metrics.OhlcPeriodsStr[indexPeriod],
+	// 	exchange:    "poloniex",
+	// })
 }
 
 func getBaseOHLC(ind *indicator) {
+
+	ind.dataSource = conf.Metrics.Sources[ind.exchange]
 
 	go networking.RunEvery(conf.Metrics.Frequency, func(nextRun int64) {
 
@@ -52,24 +51,22 @@ func getBaseOHLC(ind *indicator) {
 
 		ind.callback = func() {
 			go computeOHLC(ind)
-			go computeBaseSMA(ind)
-			go computeBaseOBV(ind)
+			go computeOBV(ind)
+			go computeMA(ind)
 		}
 
-		ind.computeTimeIntervals()
+		ind.computeTimeIntervals(0)
 
-		res := getOHLCFromTrades(ind)
-		if res == nil {
+		imohlc := getOHLCFromTrades(ind)
+		if imohlc == nil {
 			return
 		}
 
-		mohlcs := formatOHLC(ind, res)
-		addLastIfNoVolume(ind, res, mohlcs)
-		prepareOHLCPoints(ind, mohlcs)
+		prepareOHLCPoints(ind, imohlc)
 	})
 }
 
-func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
+func getOHLCFromTrades(ind *indicator) map[int64]map[string]*ohlc {
 
 	subQuery1 := fmt.Sprintf(
 		`SELECT SUM(total) AS volume,
@@ -82,7 +79,7 @@ func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
     WHERE time >= %d AND time < %d
     GROUP BY time(%s), market;`,
 		ind.dataSource.Schema["trades_measurement"],
-		ind.timeIntervals[0].UnixNano(), ind.nextRun,
+		ind.timeIntervals[0], ind.nextRun,
 		ind.period)
 
 	subQuery2 := fmt.Sprintf(
@@ -114,18 +111,32 @@ func getOHLCFromTrades(ind *indicator) []ifxClient.Result {
 		return nil
 	}
 
-	return res
+	imohlc := formatOHLC(ind, res)
+	addLastIfNoVolume(ind, res, imohlc)
+	// setCachedOHLC(ind, imohlc)
+
+	return imohlc
 }
 
-func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
+func formatOHLC(ind *indicator,
+	res []ifxClient.Result) map[int64]map[string]*ohlc {
 
-	ohlcs := make(map[string][]*ohlc, len(res[0].Series))
+	imohlc := make(map[int64]map[string]*ohlc, len(ind.timeIntervals))
+	for _, interval := range ind.timeIntervals {
+		imohlc[interval] = make(map[string]*ohlc, len(res[0].Series))
+	}
 
 	for _, serie := range res[0].Series {
 
 		market := serie.Tags["market"]
 
-		for i, ohlcRec := range serie.Values {
+		for _, ohlcRec := range serie.Values {
+
+			if ohlcRec[0] == nil || ohlcRec[1] == nil || ohlcRec[2] == nil ||
+				ohlcRec[3] == nil || ohlcRec[4] == nil || ohlcRec[5] == nil ||
+				ohlcRec[6] == nil {
+				continue
+			}
 
 			timestamp, err := networking.ConvertJsonValueToTime(ohlcRec[0])
 			if err != nil {
@@ -134,12 +145,6 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 					"exchange": ind.exchange,
 					"market":   market,
 				}).Error("formatOHLC: networking.ConvertJsonValueToTime")
-
-				timestamp = ind.timeIntervals[i]
-			}
-
-			if ohlcRec[1] == nil || ohlcRec[2] == nil || ohlcRec[3] == nil ||
-				ohlcRec[4] == nil || ohlcRec[5] == nil || ohlcRec[6] == nil {
 				continue
 			}
 
@@ -215,75 +220,36 @@ func formatOHLC(ind *indicator, res []ifxClient.Result) map[string][]*ohlc {
 				changePercent = change * 100 / open
 			}
 
-			ohlcs[market] = append(ohlcs[market], &ohlc{
-				timestamp:       timestamp,
-				volume:          volume,
-				quantity:        quantity,
-				weightedAverage: weightedAverage,
-				open:            open,
-				high:            high,
-				low:             low,
-				close:           close,
-				change:          change,
-				changePercent:   changePercent,
-			})
+			if mohlc, ok := imohlc[timestamp.UnixNano()]; !ok {
+
+				logger.WithFields(logrus.Fields{
+					"error":    "timestamp not matching",
+					"exchange": ind.exchange,
+					"market":   market,
+				}).Error("formatOHLC")
+
+			} else {
+
+				mohlc[market] = &ohlc{
+					volume:          volume,
+					quantity:        quantity,
+					weightedAverage: weightedAverage,
+					open:            open,
+					high:            high,
+					low:             low,
+					close:           close,
+					change:          change,
+					changePercent:   changePercent,
+				}
+			}
 		}
 	}
 
-	return ohlcs
+	return imohlc
 }
 
 func addLastIfNoVolume(ind *indicator, res []ifxClient.Result,
-	mohlcs map[string][]*ohlc) {
-
-	lasts := formatLasts(res)
-
-	for market, last := range lasts {
-
-		if _, ok := mohlcs[market]; !ok {
-
-			for _, interval := range ind.timeIntervals {
-				mohlcs[market] = append(mohlcs[market], &ohlc{
-					interval, 0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
-				})
-			}
-		} else {
-
-			i := 0
-			for _, interval := range ind.timeIntervals {
-
-				for _, ohlcRec := range mohlcs[market][i:] {
-
-					if interval.Equal(ohlcRec.timestamp) {
-						last = ohlcRec.close
-						i++
-						break
-					}
-
-					if interval.Before(ohlcRec.timestamp) {
-
-						mohlcs[market] = append(mohlcs[market], nil)
-						copy(mohlcs[market][i+1:], mohlcs[market][i:])
-
-						mohlcs[market][i] = &ohlc{
-							interval, 0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
-						}
-						i++
-						break
-					}
-				}
-
-				if interval.After(mohlcs[market][len(mohlcs[market])-1].timestamp) {
-					mohlcs[market] = append(mohlcs[market], &ohlc{
-						interval, 0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
-					})
-				}
-			}
-		}
-	}
-}
-
-func formatLasts(res []ifxClient.Result) map[string]float64 {
+	imohlc map[int64]map[string]*ohlc) {
 
 	lastTicks := make(map[string]float64, len(res[1].Series))
 
@@ -302,19 +268,47 @@ func formatLasts(res []ifxClient.Result) map[string]float64 {
 		lastTicks[market] = last
 	}
 
-	return lastTicks
+	for _, interval := range ind.timeIntervals {
+
+		mohlc := imohlc[interval]
+
+		for market, last := range lastTicks {
+
+			if _, ok := mohlc[market]; !ok {
+				mohlc[market] = &ohlc{
+					0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
+				}
+			} else {
+				lastTicks[market] = mohlc[market].close
+			}
+		}
+
+		for _, serie := range res[0].Series {
+
+			market := serie.Tags["market"]
+			last := lastTicks[market]
+
+			if _, ok := mohlc[market]; !ok {
+				mohlc[market] = &ohlc{
+					0.0, 0.0, 0.0, last, last, last, last, 0.0, 0.0,
+				}
+			} else {
+				lastTicks[market] = mohlc[market].close
+			}
+		}
+	}
 }
 
-func prepareOHLCPoints(ind *indicator, mohlcs map[string][]*ohlc) {
+func prepareOHLCPoints(ind *indicator, imohlc map[int64]map[string]*ohlc) {
 
 	measurement := ind.destination
 	points := make([]*ifxClient.Point, 0)
 
-	for market, ohlcs := range mohlcs {
+	for interval, mohlc := range imohlc {
 
-		for _, ohlc := range ohlcs {
+		timestamp := time.Unix(0, interval)
 
-			timestamp := ohlc.timestamp
+		for market, ohlc := range mohlc {
 
 			tags := map[string]string{
 				"market":   market,

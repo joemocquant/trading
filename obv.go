@@ -2,56 +2,46 @@ package metrics
 
 import (
 	"fmt"
+	"time"
 	"trading/networking"
 	"trading/networking/database"
 
+	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
 func computeOBV(from *indicator) {
 
-	indexPeriod := from.indexPeriod + 1
-
-	if len(conf.Metrics.Periods) <= indexPeriod {
-		return
-	}
-
 	ind := &indicator{
 		nextRun:     from.nextRun,
-		indexPeriod: indexPeriod,
-		period:      conf.Metrics.Periods[indexPeriod],
+		period:      conf.Metrics.OhlcPeriods[from.indexPeriod],
+		indexPeriod: from.indexPeriod,
 		dataSource:  from.dataSource,
-		source:      "obv_" + conf.Metrics.PeriodsStr[from.indexPeriod],
-		destination: "obv_" + conf.Metrics.PeriodsStr[indexPeriod],
+		source:      from.destination,
+		destination: "obv_" + conf.Metrics.OhlcPeriodsStr[from.indexPeriod],
 		exchange:    from.exchange,
 	}
 
-	ind.callback = func() {
-		computeOBV(ind)
-	}
+	ind.computeTimeIntervals(1)
 
-	ind.computeTimeIntervals()
-
-	res := getOBV(ind)
-	if res == nil {
+	imobv := getOBV(ind)
+	if imobv == nil {
 		return
 	}
 
-	mobvs := formatOBV(ind, res)
-	prepareOBVPoints(ind, mobvs)
+	prepareOBVPoints(ind, imobv)
 }
 
-func getOBV(ind *indicator) []ifxClient.Result {
+func getOBV(ind *indicator) map[int64]map[string]float64 {
 
 	query := fmt.Sprintf(
-		`SELECT SUM(obv)
+		`SELECT volume
     FROM %s
     WHERE time >= %d AND time < %d AND exchange = '%s'
-    GROUP BY time(%s), market;`,
+    GROUP BY market;`,
 		ind.source,
-		ind.timeIntervals[0].UnixNano()-int64(ind.period), ind.nextRun,
-		ind.exchange,
-		ind.period)
+		ind.timeIntervals[0], ind.nextRun,
+		ind.exchange)
 
 	var res []ifxClient.Result
 
@@ -72,5 +62,146 @@ func getOBV(ind *indicator) []ifxClient.Result {
 		return nil
 	}
 
-	return res
+	imobv := formatOBV(ind, res)
+	// setCachedOBV(ind, imobv)
+
+	return imobv
+}
+
+func formatOBV(ind *indicator,
+	res []ifxClient.Result) map[int64]map[string]float64 {
+
+	imvol := make(map[int64]map[string]float64, len(ind.timeIntervals))
+	for _, interval := range ind.timeIntervals {
+		imvol[interval] = make(map[string]float64, len(res[0].Series))
+	}
+
+	for _, serie := range res[0].Series {
+
+		market := serie.Tags["market"]
+
+		for _, volRec := range serie.Values {
+
+			if volRec[0] == nil || volRec[1] == nil {
+				continue
+			}
+
+			timestamp, err := networking.ConvertJsonValueToTime(volRec[0])
+			if err != nil {
+				logger.WithFields(logrus.Fields{
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
+				}).Error("formatOBV: networking.ConvertJsonValueToTime")
+				continue
+			}
+
+			volume, err := networking.ConvertJsonValueToFloat64(volRec[1])
+			if err != nil {
+				logger.WithFields(logrus.Fields{
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
+				}).Error("formatOBV: networking.ConvertJsonValueToFloat64")
+				continue
+			}
+
+			if mvol, ok := imvol[timestamp.UnixNano()]; !ok {
+
+				logger.WithFields(logrus.Fields{
+					"error":    "timestamp not matching",
+					"exchange": ind.exchange,
+					"market":   market,
+				}).Error("formatOBV")
+
+			} else {
+				mvol[market] = volume
+			}
+		}
+	}
+
+	imobv := make(map[int64]map[string]float64, len(ind.timeIntervals))
+	for _, interval := range ind.timeIntervals {
+		imobv[interval] = make(map[string]float64, len(res[0].Series))
+	}
+
+	for _, serie := range res[0].Series {
+
+		market := serie.Tags["market"]
+
+		for interval, mvol := range imvol {
+
+			if prevVol, ok := imvol[interval-int64(ind.period)][market]; ok {
+
+				if vol, ok := mvol[market]; ok {
+
+					obvValue := 0.0
+
+					if vol > prevVol {
+						obvValue = prevVol + vol
+
+					} else if vol == prevVol {
+						obvValue = vol
+
+					} else {
+						obvValue = prevVol - vol
+					}
+
+					if mobv, ok := imobv[interval]; !ok {
+
+						logger.WithFields(logrus.Fields{
+							"error":    "timestamp not matching",
+							"exchange": ind.exchange,
+							"market":   market,
+						}).Error("formatOBV")
+
+					} else {
+						mobv[market] = obvValue
+					}
+				}
+			}
+		}
+	}
+
+	return imobv
+}
+
+func prepareOBVPoints(ind *indicator, imobv map[int64]map[string]float64) {
+
+	measurement := ind.destination
+	points := make([]*ifxClient.Point, 0)
+
+	for interval, mobv := range imobv {
+
+		timestamp := time.Unix(0, interval)
+
+		for market, obv := range mobv {
+
+			tags := map[string]string{
+				"market":   market,
+				"exchange": ind.exchange,
+			}
+
+			fields := map[string]interface{}{
+				"obv": obv,
+			}
+
+			pt, err := ifxClient.NewPoint(measurement, tags, fields, timestamp)
+			if err != nil {
+				logger.WithField("error", err).Error(
+					"prepareOBVPoints: ifxClient.NewPoint")
+			}
+			points = append(points, pt)
+		}
+	}
+
+	if len(points) == 0 {
+		return
+	}
+
+	batchsToWrite <- &database.BatchPoints{
+		TypePoint: ind.dataSource.Schema["database"] + "OBV",
+		Points:    points,
+		Callback:  ind.callback,
+	}
 }

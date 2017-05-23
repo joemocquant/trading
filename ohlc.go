@@ -12,36 +12,37 @@ func computeOHLC(from *indicator) {
 
 	indexPeriod := from.indexPeriod + 1
 
-	if len(conf.Metrics.Periods) <= indexPeriod {
+	if len(conf.Metrics.OhlcPeriods) <= indexPeriod {
 		return
 	}
 
 	ind := &indicator{
 		nextRun:     from.nextRun,
 		indexPeriod: indexPeriod,
-		period:      conf.Metrics.Periods[indexPeriod],
+		period:      conf.Metrics.OhlcPeriods[indexPeriod],
 		dataSource:  from.dataSource,
-		source:      "ohlc_" + conf.Metrics.PeriodsStr[from.indexPeriod],
-		destination: "ohlc_" + conf.Metrics.PeriodsStr[indexPeriod],
+		source:      "ohlc_" + conf.Metrics.OhlcPeriodsStr[from.indexPeriod],
+		destination: "ohlc_" + conf.Metrics.OhlcPeriodsStr[indexPeriod],
 		exchange:    from.exchange,
 	}
 
 	ind.callback = func() {
-		computeOHLC(ind)
+		go computeOHLC(ind)
+		go computeOBV(ind)
+		go computeMA(ind)
 	}
 
-	ind.computeTimeIntervals()
+	ind.computeTimeIntervals(0)
 
-	res := getOHLC(ind)
-	if res == nil {
+	mohlc := getOHLC(ind)
+	if mohlc == nil {
 		return
 	}
 
-	mohlcs := formatOHLC(ind, res)
-	prepareOHLCPoints(ind, mohlcs)
+	prepareOHLCPoints(ind, mohlc)
 }
 
-func getOHLC(ind *indicator) []ifxClient.Result {
+func getOHLC(ind *indicator) map[int64]map[string]*ohlc {
 
 	query := fmt.Sprintf(
 		`SELECT SUM(volume) AS volume,
@@ -54,7 +55,7 @@ func getOHLC(ind *indicator) []ifxClient.Result {
     WHERE time >= %d AND time < %d AND exchange = '%s'
     GROUP BY time(%s), market;`,
 		ind.source,
-		ind.timeIntervals[0].UnixNano(), ind.nextRun,
+		ind.timeIntervals[0], ind.nextRun,
 		ind.exchange,
 		ind.period)
 
@@ -77,5 +78,8 @@ func getOHLC(ind *indicator) []ifxClient.Result {
 		return nil
 	}
 
-	return res
+	imohlc := formatOHLC(ind, res)
+	// setCachedOHLC(ind, imohlc)
+
+	return imohlc
 }

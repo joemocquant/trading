@@ -18,6 +18,7 @@ var (
 	logger        *logrus.Entry
 	dbClient      ifxClient.Client
 	batchsToWrite chan *database.BatchPoints
+	cm            dataSourceCachedMetrics
 )
 
 type configuration struct {
@@ -30,21 +31,17 @@ type metricsConf struct {
 	FlushBatchsPeriodMs int               `json:"flush_batchs_period_ms"`
 	FlushCapacity       int               `json:"flush_capacity"`
 	Frequency           time.Duration
-	PeriodsStr          []string `json:"periods"`
-	Periods             []time.Duration
-	MarketDepths        *marketDepthsConf `json:"market_depths"`
-	Sources             *sources          `json:"sources"`
+	OhlcPeriodsStr      []string `json:"ohlc_periods"`
+	OhlcPeriods         []time.Duration
+	MaMax               int                      `json:"ma_max"`
+	MarketDepths        *marketDepthsConf        `json:"market_depths"`
+	Sources             map[string]*exchangeConf `json:"sources"`
 }
 
 type marketDepthsConf struct {
 	Intervals                  []float64 `json:"intervals"`
 	Frequency                  string    `json:"frequency"`
 	PoloniexHardFetchFrequency int       `json:"poloniex_hard_fetch_frequency"`
-}
-
-type sources struct {
-	Poloniex *exchangeConf `json:"poloniex"`
-	Bittrex  *exchangeConf `json:"bittrex"`
 }
 
 type exchangeConf struct {
@@ -62,8 +59,29 @@ type indicator struct {
 	source        string
 	destination   string
 	callback      func()
-	timeIntervals []time.Time
+	timeIntervals []int64
 	exchange      string
+}
+
+func (ind *indicator) computeTimeIntervals(offset int) {
+
+	var periodCount int64 = int64(offset)
+	delta := ind.nextRun % int64(ind.period)
+	lag := int64(ind.dataSource.UpdateLag)
+
+	if delta < lag {
+		periodCount += int64(math.Ceil(float64(lag-delta) / float64(ind.period)))
+	}
+
+	start := int64(ind.nextRun) - delta - periodCount*int64(ind.period)
+	end := ind.nextRun
+
+	var timeIntervals []int64
+	for s := start; s < end; s += int64(ind.period) {
+		timeIntervals = append(timeIntervals, s)
+	}
+
+	ind.timeIntervals = timeIntervals
 }
 
 func init() {
@@ -108,6 +126,8 @@ func init() {
 	}
 
 	batchsToWrite = make(chan *database.BatchPoints, conf.Metrics.FlushCapacity)
+
+	initCachedMetrics()
 }
 
 func ComputeMetrics() {
@@ -123,6 +143,33 @@ func ComputeMetrics() {
 
 	go computeMarketDepths()
 	go computeBaseOHLC()
+}
+
+func applyMetrics(from, to time.Time, dataSources []*exchangeConf,
+	apply func(ind *indicator)) {
+
+	period := conf.Metrics.OhlcPeriods[0]
+	fromDuration := from.UnixNano()
+	firstRun := fromDuration - (fromDuration % int64(period)) + int64(period)
+	sleep := 200 * time.Millisecond
+
+	for start := firstRun; start < to.UnixNano(); start += int64(period) {
+
+		for _, dataSource := range dataSources {
+
+			indFrom := &indicator{
+				nextRun:     start,
+				period:      period,
+				indexPeriod: 0,
+				dataSource:  dataSource,
+				destination: "ohlc_" + conf.Metrics.OhlcPeriodsStr[0],
+				exchange:    dataSource.Schema["database"],
+			}
+
+			apply(indFrom)
+			time.Sleep(sleep)
+		}
+	}
 }
 
 func (e *exchangeConf) UnmarshalJSON(data []byte) error {
@@ -168,67 +215,15 @@ func (m *metricsConf) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("time.ParseDuration: %v", err)
 	}
 
-	m.Periods = make([]time.Duration, len(m.PeriodsStr))
-	for i, p := range m.PeriodsStr {
+	m.OhlcPeriods = make([]time.Duration, len(m.OhlcPeriodsStr))
+	for i, p := range m.OhlcPeriodsStr {
 
 		period, err := time.ParseDuration(p)
 		if err != nil {
 			return fmt.Errorf("time.ParseDuration: %v", err)
 		}
-		m.Periods[i] = period
+		m.OhlcPeriods[i] = period
 	}
 
 	return nil
-}
-
-func (ind *indicator) computeTimeIntervals() {
-
-	var periodCount int64 = 0
-	delta := ind.nextRun % int64(ind.period)
-	lag := int64(ind.dataSource.UpdateLag)
-
-	if delta >= lag {
-		periodCount = 0
-
-	} else {
-		periodCount = int64(math.Ceil(float64(lag-delta) / float64(ind.period)))
-	}
-
-	start := int64(ind.nextRun) - delta - periodCount*int64(ind.period)
-	end := ind.nextRun
-
-	var timeIntervals []time.Time
-	for s := start; s <= end; s += int64(ind.period) {
-		timeIntervals = append(timeIntervals, time.Unix(0, s))
-	}
-
-	ind.timeIntervals = timeIntervals
-}
-
-func applyMetrics(from, to time.Time, dataSources []*exchangeConf,
-	apply func(ind *indicator)) {
-
-	period := conf.Metrics.Periods[0]
-	fromDuration := from.UnixNano()
-	firstRun := fromDuration - (fromDuration % int64(period)) + int64(period)
-	sleep := 200 * time.Millisecond
-
-	for start := firstRun; start < to.UnixNano(); start += int64(period) {
-
-		for _, dataSource := range dataSources {
-
-			indFrom := &indicator{
-				nextRun:     start,
-				period:      period,
-				indexPeriod: 0,
-				dataSource:  dataSource,
-				destination: "ohlc_" + conf.Metrics.PeriodsStr[0],
-				exchange:    dataSource.Schema["database"],
-			}
-
-			apply(indFrom)
-			time.Sleep(sleep)
-		}
-
-	}
 }
