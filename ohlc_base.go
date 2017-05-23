@@ -33,12 +33,12 @@ func computeBaseOHLC() {
 		exchange:    "bittrex",
 	})
 
-	// getBaseOHLC(&indicator{
-	// 	indexPeriod: indexPeriod,
-	// 	period:      conf.Metrics.OhlcPeriods[indexPeriod],
-	// 	destination: "ohlc_" + conf.Metrics.OhlcPeriodsStr[indexPeriod],
-	// 	exchange:    "poloniex",
-	// })
+	getBaseOHLC(&indicator{
+		indexPeriod: indexPeriod,
+		period:      conf.Metrics.OhlcPeriods[indexPeriod],
+		destination: "ohlc_" + conf.Metrics.OhlcPeriodsStr[indexPeriod],
+		exchange:    "poloniex",
+	})
 }
 
 func getBaseOHLC(ind *indicator) {
@@ -48,14 +48,14 @@ func getBaseOHLC(ind *indicator) {
 	go networking.RunEvery(conf.Metrics.Frequency, func(nextRun int64) {
 
 		ind.nextRun = nextRun
+		ind.computeTimeIntervals(0)
 
 		ind.callback = func() {
 			go computeOHLC(ind)
+			cacheLastOHLC(ind, conf.Metrics.LengthMax)
 			go computeOBV(ind)
 			go computeMA(ind)
 		}
-
-		ind.computeTimeIntervals(0)
 
 		imohlc := getOHLCFromTrades(ind)
 		if imohlc == nil {
@@ -113,7 +113,6 @@ func getOHLCFromTrades(ind *indicator) map[int64]map[string]*ohlc {
 
 	imohlc := formatOHLC(ind, res)
 	addLastIfNoVolume(ind, res, imohlc)
-	// setCachedOHLC(ind, imohlc)
 
 	return imohlc
 }

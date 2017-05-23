@@ -33,7 +33,7 @@ type metricsConf struct {
 	Frequency           time.Duration
 	OhlcPeriodsStr      []string `json:"ohlc_periods"`
 	OhlcPeriods         []time.Duration
-	MaMax               int                      `json:"ma_max"`
+	LengthMax           int                      `json:"length_max"`
 	MarketDepths        *marketDepthsConf        `json:"market_depths"`
 	Sources             map[string]*exchangeConf `json:"sources"`
 }

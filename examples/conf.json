@@ -19,7 +19,8 @@
     "ohlc_periods": ["30s", "1m", "5m", "10m", "30m",
       "1h", "3h", "6h", "12h","24h", "168h", "672h"],
     "frequency": "15s",
-    "ma_max": 100,
+
+    "length_max": 100,
 
     "market_depths": {
       "intervals":[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,  11, 12, 13,

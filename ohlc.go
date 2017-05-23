@@ -26,13 +26,14 @@ func computeOHLC(from *indicator) {
 		exchange:    from.exchange,
 	}
 
+	ind.computeTimeIntervals(0)
+
 	ind.callback = func() {
 		go computeOHLC(ind)
+		cacheLastOHLC(ind, conf.Metrics.LengthMax)
 		go computeOBV(ind)
 		go computeMA(ind)
 	}
-
-	ind.computeTimeIntervals(0)
 
 	mohlc := getOHLC(ind)
 	if mohlc == nil {
@@ -53,7 +54,7 @@ func getOHLC(ind *indicator) map[int64]map[string]*ohlc {
       LAST(close) AS close
     FROM %s
     WHERE time >= %d AND time < %d AND exchange = '%s'
-    GROUP BY time(%s), market;`,
+    GROUP BY time(%s), market`,
 		ind.source,
 		ind.timeIntervals[0], ind.nextRun,
 		ind.exchange,
@@ -78,8 +79,5 @@ func getOHLC(ind *indicator) map[int64]map[string]*ohlc {
 		return nil
 	}
 
-	imohlc := formatOHLC(ind, res)
-	// setCachedOHLC(ind, imohlc)
-
-	return imohlc
+	return formatOHLC(ind, res)
 }

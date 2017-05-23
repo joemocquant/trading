@@ -29,7 +29,7 @@ func computeMA(from *indicator) {
 		exchange:    from.exchange,
 	}
 
-	offset := conf.Metrics.MaMax - 1
+	offset := conf.Metrics.LengthMax - 1
 	if offset < 1 {
 		logger.WithField("error", "conf: ma_max must be greater than 1").Fatal(
 			"ComputeMA")
@@ -37,43 +37,28 @@ func computeMA(from *indicator) {
 
 	ind.computeTimeIntervals(offset)
 
-	res := getMAFromOHLC(ind)
-	if res == nil {
-		return
-	}
-
-	imma := formatMA(ind, res)
+	imma := getMA(ind)
 	prepareMAPoints(ind, imma)
 }
 
-func getMAFromOHLC(ind *indicator) []ifxClient.Result {
+func getMA(ind *indicator) map[int64]map[string]*ma {
 
-	subQuery1 := fmt.Sprintf(
-		`SELECT close
-    FROM %s
-    WHERE time >= %d AND time < %d AND exchange = '%s'
-    GROUP BY market;`,
-		ind.source,
-		ind.timeIntervals[0], ind.nextRun,
-		ind.exchange)
-
-	fields := make([]string, conf.Metrics.MaMax)
-	for i := 0; i < conf.Metrics.MaMax; i++ {
+	fields := make([]string, conf.Metrics.LengthMax)
+	for i := 0; i < conf.Metrics.LengthMax; i++ {
 		fields[i] = "ema_" + strconv.Itoa(i+1)
 	}
 	selectedFields := strings.Join(fields, ", ")
 
-	subqQuery2 := fmt.Sprintf(
+	query := fmt.Sprintf(
 		`SELECT %s
     FROM %s
     WHERE time = %d AND exchange = '%s'
     GROUP BY market;`,
 		selectedFields,
 		ind.destination,
-		ind.timeIntervals[conf.Metrics.MaMax-2],
+		ind.timeIntervals[conf.Metrics.LengthMax-2],
 		ind.exchange)
 
-	query := subQuery1 + subqQuery2
 	var res []ifxClient.Result
 
 	request := func() (err error) {
@@ -93,91 +78,44 @@ func getMAFromOHLC(ind *indicator) []ifxClient.Result {
 		return nil
 	}
 
-	return res
+	return formatMA(ind, res)
 }
 
 func formatMA(ind *indicator,
 	res []ifxClient.Result) map[int64]map[string]*ma {
 
-	imclose := make(map[int64]map[string]float64, len(ind.timeIntervals))
-	for _, interval := range ind.timeIntervals {
-		imclose[interval] = make(map[string]float64, len(res[0].Series))
-	}
-
-	for _, serie := range res[0].Series {
-
-		market := serie.Tags["market"]
-
-		for _, closeRec := range serie.Values {
-
-			if closeRec[0] == nil || closeRec[1] == nil {
-				continue
-			}
-
-			timestamp, err := networking.ConvertJsonValueToTime(closeRec[0])
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"error":    err,
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatSMA: networking.ConvertJsonValueToTime")
-				continue
-			}
-
-			close, err := networking.ConvertJsonValueToFloat64(closeRec[1])
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"error":    err,
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatSMA: networking.ConvertJsonValueToFloat64")
-				continue
-			}
-
-			if mclose, ok := imclose[timestamp.UnixNano()]; !ok {
-
-				logger.WithFields(logrus.Fields{
-					"error":    "timestamp not matching",
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatSMA")
-
-			} else {
-				mclose[market] = close
-			}
-		}
+	imohlc := getCachedLastOHLC(ind)
+	if imohlc == nil {
+		return nil
 	}
 
 	imma := make(map[int64]map[string]*ma, len(ind.timeIntervals))
-	for _, interval := range ind.timeIntervals[conf.Metrics.MaMax-1:] {
-		imma[interval] = make(map[string]*ma, len(res[0].Series))
-	}
 
 	memas := getPreviousEMA(ind, res)
 
-	for _, serie := range res[0].Series {
+	for i, interval := range ind.timeIntervals[conf.Metrics.LengthMax-1:] {
 
-		market := serie.Tags["market"]
+		imma[interval] = make(map[string]*ma, len(imohlc[interval]))
 
-		if _, ok := memas[market]; !ok {
-			memas[market] = make(map[int]float64, conf.Metrics.MaMax)
-		}
+		for market, ohlc := range imohlc[interval] {
 
-		for i, interval := range ind.timeIntervals[conf.Metrics.MaMax-1:] {
+			if _, ok := memas[market]; !ok {
+				memas[market] = make(map[int]float64, conf.Metrics.LengthMax)
+			}
 
 			imma[interval][market] = &ma{
-				smas: make(map[int]float64, conf.Metrics.MaMax),
-				emas: make(map[int]float64, conf.Metrics.MaMax),
+				smas: make(map[int]float64, conf.Metrics.LengthMax),
+				emas: make(map[int]float64, conf.Metrics.LengthMax),
 			}
 			cumulativeSum := 0.0
 
-			for maLength := 1; maLength <= conf.Metrics.MaMax; maLength++ {
+			for maLength := 1; maLength <= conf.Metrics.LengthMax; maLength++ {
 
-				intervalOffset := ind.timeIntervals[i+conf.Metrics.MaMax-maLength]
+				intervalOffset := ind.timeIntervals[i+conf.Metrics.LengthMax-maLength]
 
-				if close, ok := imclose[intervalOffset][market]; ok {
+				if ohlc, ok := imohlc[intervalOffset][market]; ok {
 
-					cumulativeSum += close
+					cumulativeSum += ohlc.close
 					sma := cumulativeSum / float64(maLength)
 					imma[interval][market].smas[maLength] = sma
 
@@ -186,26 +124,21 @@ func formatMA(ind *indicator,
 				}
 			}
 
-			for maLength := 1; maLength <= conf.Metrics.MaMax; maLength++ {
+			for maLength := 1; maLength <= conf.Metrics.LengthMax; maLength++ {
 
 				var emaSeed float64
 				if ema, ok := memas[market][maLength]; ok {
 					emaSeed = ema
-				} else if close, ok := imclose[interval-int64(ind.period)][market]; ok {
-					emaSeed = close
+				} else if ohlc, ok := imohlc[interval-int64(ind.period)][market]; ok {
+					emaSeed = ohlc.close
 				} else {
 					continue
 				}
 
-				if close, ok := imclose[interval][market]; ok {
-
-					multiplier := 2.0 / float64(maLength+1)
-					ema := (close-emaSeed)*multiplier + emaSeed
-					imma[interval][market].emas[maLength] = ema
-					memas[market][maLength] = ema
-				} else {
-					break
-				}
+				multiplier := 2.0 / float64(maLength+1)
+				ema := (ohlc.close-emaSeed)*multiplier + emaSeed
+				imma[interval][market].emas[maLength] = ema
+				memas[market][maLength] = ema
 			}
 		}
 	}
@@ -216,17 +149,17 @@ func formatMA(ind *indicator,
 func getPreviousEMA(ind *indicator,
 	res []ifxClient.Result) map[string]map[int]float64 {
 
-	memas := make(map[string]map[int]float64, len(res[1].Series))
+	memas := make(map[string]map[int]float64, len(res[0].Series))
 
-	for _, serie := range res[1].Series {
+	for _, serie := range res[0].Series {
 
 		market := serie.Tags["market"]
 
 		for _, emasRec := range serie.Values {
 
-			memas[market] = make(map[int]float64, conf.Metrics.MaMax)
+			memas[market] = make(map[int]float64, conf.Metrics.LengthMax)
 
-			for i := 1; i <= conf.Metrics.MaMax; i++ {
+			for i := 1; i <= conf.Metrics.LengthMax; i++ {
 				if emasRec[i] == nil {
 					continue
 				}
@@ -237,7 +170,7 @@ func getPreviousEMA(ind *indicator,
 						"error":    err,
 						"exchange": ind.exchange,
 						"market":   market,
-					}).Error("formatMA: networking.ConvertJsonValueToFloat64")
+					}).Error("getPreviousEMA: networking.ConvertJsonValueToFloat64")
 					continue
 				}
 
