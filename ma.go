@@ -17,7 +17,7 @@ type ma struct {
 	emas map[int]float64
 }
 
-func computeMA(from *indicator) {
+func getMA(from *indicator) {
 
 	ind := &indicator{
 		nextRun:     from.nextRun,
@@ -29,78 +29,37 @@ func computeMA(from *indicator) {
 		exchange:    from.exchange,
 	}
 
-	offset := conf.Metrics.LengthMax - 1
-	if offset < 1 {
-		logger.WithField("error", "conf: ma_max must be greater than 1").Fatal(
-			"ComputeMA")
-	}
+	ind.computeTimeIntervals(conf.Metrics.LengthMax - 1)
 
-	ind.computeTimeIntervals(offset)
-
-	imma := getMA(ind)
+	imma := computeMA(ind)
+	setCacheLastMA(ind, imma)
 	prepareMAPoints(ind, imma)
 }
 
-func getMA(ind *indicator) map[int64]map[string]*ma {
-
-	fields := make([]string, conf.Metrics.LengthMax)
-	for i := 0; i < conf.Metrics.LengthMax; i++ {
-		fields[i] = "ema_" + strconv.Itoa(i+1)
-	}
-	selectedFields := strings.Join(fields, ", ")
-
-	query := fmt.Sprintf(
-		`SELECT %s
-    FROM %s
-    WHERE time = %d AND exchange = '%s'
-    GROUP BY market;`,
-		selectedFields,
-		ind.destination,
-		ind.timeIntervals[conf.Metrics.LengthMax-2],
-		ind.exchange)
-
-	var res []ifxClient.Result
-
-	request := func() (err error) {
-		res, err = database.QueryDB(
-			dbClient, query, conf.Metrics.Schema["database"])
-		return err
-	}
-
-	success := networking.ExecuteRequest(&networking.RequestInfo{
-		Logger:   logger.WithField("query", query),
-		Period:   ind.period,
-		ErrorMsg: "runQuery: database.QueryDB",
-		Request:  request,
-	})
-
-	if !success {
-		return nil
-	}
-
-	return formatMA(ind, res)
-}
-
-func formatMA(ind *indicator,
-	res []ifxClient.Result) map[int64]map[string]*ma {
+func computeMA(ind *indicator) map[int64]map[string]*ma {
 
 	imohlc := getCachedLastOHLC(ind)
 	if imohlc == nil {
 		return nil
 	}
 
+	lastImma := getLastImma(ind)
 	imma := make(map[int64]map[string]*ma, len(ind.timeIntervals))
 
-	memas := getPreviousEMA(ind, res)
-
 	for i, interval := range ind.timeIntervals[conf.Metrics.LengthMax-1:] {
+
+		if _, ok := lastImma[interval]; !ok {
+			lastImma[interval] = make(map[string]*ma, len(imohlc[interval]))
+		}
 
 		imma[interval] = make(map[string]*ma, len(imohlc[interval]))
 
 		for market, ohlc := range imohlc[interval] {
 
-			if _, ok := memas[market]; !ok {
-				memas[market] = make(map[int]float64, conf.Metrics.LengthMax)
+			if _, ok := lastImma[interval][market]; !ok {
+				lastImma[interval][market] = &ma{
+					emas: make(map[int]float64, conf.Metrics.LengthMax),
+				}
 			}
 
 			imma[interval][market] = &ma{
@@ -126,19 +85,25 @@ func formatMA(ind *indicator,
 
 			for maLength := 1; maLength <= conf.Metrics.LengthMax; maLength++ {
 
-				var emaSeed float64
-				if ema, ok := memas[market][maLength]; ok {
-					emaSeed = ema
-				} else if ohlc, ok := imohlc[interval-int64(ind.period)][market]; ok {
-					emaSeed = ohlc.close
-				} else {
-					continue
+				emaSeed, emaFound := 0.0, false
+				if ma, ok := lastImma[interval-int64(ind.period)][market]; ok {
+					if emaSeed, ok = ma.emas[maLength]; ok {
+						emaFound = true
+					}
+				}
+
+				if !emaFound {
+					if ohlc, ok := imohlc[interval-int64(ind.period)][market]; ok {
+						emaSeed = ohlc.close
+					} else {
+						continue
+					}
 				}
 
 				multiplier := 2.0 / float64(maLength+1)
-				ema := (ohlc.close-emaSeed)*multiplier + emaSeed
+				ema := multiplier*ohlc.close + (1-multiplier)*emaSeed
 				imma[interval][market].emas[maLength] = ema
-				memas[market][maLength] = ema
+				lastImma[interval][market].emas[maLength] = ema
 			}
 		}
 	}
@@ -146,40 +111,97 @@ func formatMA(ind *indicator,
 	return imma
 }
 
-func getPreviousEMA(ind *indicator,
-	res []ifxClient.Result) map[string]map[int]float64 {
+func getLastImma(ind *indicator) map[int64]map[string]*ma {
 
-	memas := make(map[string]map[int]float64, len(res[0].Series))
+	lastImma := getCachedLastMA(ind)
+	if lastImma != nil {
+		return lastImma
+	}
+
+	fields := make([]string, conf.Metrics.LengthMax)
+	for i := 0; i < conf.Metrics.LengthMax; i++ {
+		fields[i] = "ema_" + strconv.Itoa(i+1)
+	}
+	selectedFields := strings.Join(fields, ", ")
+
+	query := fmt.Sprintf(
+		`SELECT %s
+    FROM %s
+    WHERE time = %d AND exchange = '%s'
+    GROUP BY market`,
+		selectedFields,
+		ind.destination,
+		ind.timeIntervals[conf.Metrics.LengthMax-2],
+		ind.exchange)
+
+	var res []ifxClient.Result
+
+	request := func() (err error) {
+		res, err = database.QueryDB(
+			dbClient, query, conf.Metrics.Schema["database"])
+		return err
+	}
+
+	success := networking.ExecuteRequest(&networking.RequestInfo{
+		Logger:   logger.WithField("query", query),
+		Period:   ind.period,
+		ErrorMsg: "runQuery: database.QueryDB",
+		Request:  request,
+	})
+
+	if !success {
+		return nil
+	}
+
+	imma := make(map[int64]map[string]*ma, 1)
 
 	for _, serie := range res[0].Series {
 
 		market := serie.Tags["market"]
+		emasRec := serie.Values[0]
 
-		for _, emasRec := range serie.Values {
+		if emasRec[0] == nil {
+			continue
+		}
 
-			memas[market] = make(map[int]float64, conf.Metrics.LengthMax)
+		timestamp, err := networking.ConvertJsonValueToTime(emasRec[0])
+		if err != nil {
+			logger.WithFields(logrus.Fields{
+				"error":    err,
+				"exchange": ind.exchange,
+				"market":   market,
+			}).Error("formatOHLC: networking.ConvertJsonValueToTime")
+			continue
+		}
 
-			for i := 1; i <= conf.Metrics.LengthMax; i++ {
-				if emasRec[i] == nil {
-					continue
-				}
+		if _, ok := imma[timestamp.UnixNano()]; !ok {
+			imma[timestamp.UnixNano()] = make(map[string]*ma, len(res[0].Series))
+		}
 
-				ema, err := networking.ConvertJsonValueToFloat64(emasRec[1])
-				if err != nil {
-					logger.WithFields(logrus.Fields{
-						"error":    err,
-						"exchange": ind.exchange,
-						"market":   market,
-					}).Error("getPreviousEMA: networking.ConvertJsonValueToFloat64")
-					continue
-				}
+		imma[timestamp.UnixNano()][market] = &ma{
+			emas: make(map[int]float64, conf.Metrics.LengthMax),
+		}
 
-				memas[market][i] = ema
+		for i := 1; i <= conf.Metrics.LengthMax; i++ {
+			if emasRec[i] == nil {
+				continue
 			}
+
+			ema, err := networking.ConvertJsonValueToFloat64(emasRec[1])
+			if err != nil {
+				logger.WithFields(logrus.Fields{
+					"error":    err,
+					"exchange": ind.exchange,
+					"market":   market,
+				}).Error("getPreviousEMA: networking.ConvertJsonValueToFloat64")
+				continue
+			}
+
+			imma[timestamp.UnixNano()][market].emas[i] = ema
 		}
 	}
 
-	return memas
+	return imma
 }
 
 func prepareMAPoints(ind *indicator, imma map[int64]map[string]*ma) {
@@ -226,7 +248,7 @@ func prepareMAPoints(ind *indicator, imma map[int64]map[string]*ma) {
 	}
 
 	batchsToWrite <- &database.BatchPoints{
-		TypePoint: ind.dataSource.Schema["database"] + "MA",
+		TypePoint: ind.exchange + "MA",
 		Points:    points,
 		Callback:  ind.callback,
 	}

@@ -7,7 +7,7 @@ import (
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
-func computeOBV(from *indicator) {
+func getOBV(from *indicator) {
 
 	ind := &indicator{
 		nextRun:     from.nextRun,
@@ -21,11 +21,11 @@ func computeOBV(from *indicator) {
 
 	ind.computeTimeIntervals(1)
 
-	imobv := getOBV(ind)
+	imobv := computeOBV(ind)
 	prepareOBVPoints(ind, imobv)
 }
 
-func getOBV(ind *indicator) map[int64]map[string]float64 {
+func computeOBV(ind *indicator) map[int64]map[string]float64 {
 
 	imohlc := getCachedLastOHLC(ind)
 	if imohlc == nil {
@@ -96,7 +96,7 @@ func prepareOBVPoints(ind *indicator, imobv map[int64]map[string]float64) {
 	}
 
 	batchsToWrite <- &database.BatchPoints{
-		TypePoint: ind.dataSource.Schema["database"] + "OBV",
+		TypePoint: ind.exchange + "OBV",
 		Points:    points,
 		Callback:  ind.callback,
 	}

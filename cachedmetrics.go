@@ -7,7 +7,6 @@ import (
 	"trading/networking"
 	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
 )
 
@@ -17,9 +16,8 @@ type periodsCachedMetrics map[time.Duration]*marketsCachedMetrics
 
 type marketsCachedMetrics struct {
 	sync.RWMutex
-	imohlc     map[int64]map[string]*ohlc
-	imobv      map[int64]map[string]float64
 	lastImohlc map[int64]map[string]*ohlc
+	lastImma   map[int64]map[string]*ma
 }
 
 func initCachedMetrics() {
@@ -39,47 +37,43 @@ func initCachedMetrics() {
 	}
 }
 
-func setCachedOHLC(ind *indicator, imohlc map[int64]map[string]*ohlc) {
+func resetCachedMetrics() {
 
-	cm[ind.exchange][ind.period].Lock()
-	defer cm[ind.exchange][ind.period].Unlock()
+	for _, dataSource := range conf.Metrics.Sources {
 
-	cm[ind.exchange][ind.period].imohlc = imohlc
+		exchange := dataSource.Schema["database"]
+
+		for _, period := range conf.Metrics.OhlcPeriods {
+			cm[exchange][period].Lock()
+			cm[exchange][period] = &marketsCachedMetrics{}
+			cm[exchange][period].Unlock()
+		}
+	}
 }
 
-func getCachedOHLC(ind *indicator) map[int64]map[string]*ohlc {
+func resetCachedLastOHLC(ind *indicator) {
+
+	for _, period := range conf.Metrics.OhlcPeriods {
+		cm[ind.exchange][period].Lock()
+		cm[ind.exchange][period].lastImohlc = nil
+		cm[ind.exchange][period].Unlock()
+	}
+}
+
+func getCachedLastMA(ind *indicator) map[int64]map[string]*ma {
 
 	cm[ind.exchange][ind.period].RLock()
 	defer cm[ind.exchange][ind.period].RUnlock()
 
-	return cm[ind.exchange][ind.period].imohlc
+	return cm[ind.exchange][ind.period].lastImma
 }
 
-func setCachedOBV(ind *indicator, imobv map[int64]map[string]float64) {
+func setCacheLastMA(ind *indicator, imma map[int64]map[string]*ma) {
 
 	cm[ind.exchange][ind.period].Lock()
 	defer cm[ind.exchange][ind.period].Unlock()
 
-	cm[ind.exchange][ind.period].imobv = imobv
-}
-
-func getCachedOBV(ind *indicator) map[int64]map[string]float64 {
-
-	cm[ind.exchange][ind.period].RLock()
-	defer cm[ind.exchange][ind.period].RUnlock()
-
-	return cm[ind.exchange][ind.period].imobv
-}
-
-func cacheLastOHLC(ind *indicator, length int) {
-
-	ind.computeTimeIntervals(length - 1)
-	imohlc := getLastOHLC(ind)
-
-	cm[ind.exchange][ind.period].Lock()
-	defer cm[ind.exchange][ind.period].Unlock()
-
-	cm[ind.exchange][ind.period].lastImohlc = imohlc
+	cm[ind.exchange][ind.period].lastImma = imma
 }
 
 func getCachedLastOHLC(ind *indicator) map[int64]map[string]*ohlc {
@@ -90,10 +84,52 @@ func getCachedLastOHLC(ind *indicator) map[int64]map[string]*ohlc {
 	return cm[ind.exchange][ind.period].lastImohlc
 }
 
+func updateCacheLastOHLC(ind *indicator, imohlc map[int64]map[string]*ohlc) {
+
+	cachedImohlc := getCachedLastOHLC(ind)
+	ind.computeTimeIntervals(conf.Metrics.LengthMax - 1)
+
+	if len(cachedImohlc) > len(ind.timeIntervals) {
+		cachedImohlc = nil
+	}
+
+	if cachedImohlc == nil {
+		cacheLastOHLC(ind)
+		cachedImohlc = getCachedLastOHLC(ind)
+	}
+
+	if cachedImohlc == nil {
+		return
+	}
+
+	cm[ind.exchange][ind.period].Lock()
+	defer cm[ind.exchange][ind.period].Unlock()
+
+	for interval, mohlc := range imohlc {
+		cachedImohlc[interval] = mohlc
+	}
+
+	interval := ind.timeIntervals[0]
+	for len(cachedImohlc) > len(ind.timeIntervals) {
+		interval -= int64(ind.period)
+		delete(cachedImohlc, interval)
+	}
+}
+
+func cacheLastOHLC(ind *indicator) {
+
+	imohlc := getLastOHLC(ind)
+
+	cm[ind.exchange][ind.period].Lock()
+	defer cm[ind.exchange][ind.period].Unlock()
+
+	cm[ind.exchange][ind.period].lastImohlc = imohlc
+}
+
 func getLastOHLC(ind *indicator) map[int64]map[string]*ohlc {
 
 	query := fmt.Sprintf(
-		`SELECT close, volume, change
+		`SELECT volume, quantity, open, high, low, close
     FROM %s
     WHERE time >= %d AND time < %d AND exchange = '%s'
     GROUP BY market`,
@@ -120,85 +156,6 @@ func getLastOHLC(ind *indicator) map[int64]map[string]*ohlc {
 		return nil
 	}
 
-	imohlc := formatLastOHLC(ind, res)
-	return imohlc
-}
-
-func formatLastOHLC(ind *indicator,
-	res []ifxClient.Result) map[int64]map[string]*ohlc {
-
-	imohlc := make(map[int64]map[string]*ohlc, len(ind.timeIntervals))
-	for _, interval := range ind.timeIntervals {
-		imohlc[interval] = make(map[string]*ohlc, len(res[0].Series))
-	}
-
-	for _, serie := range res[0].Series {
-
-		market := serie.Tags["market"]
-
-		for _, rec := range serie.Values {
-
-			if rec[0] == nil || rec[1] == nil || rec[2] == nil || rec[3] == nil {
-				continue
-			}
-
-			timestamp, err := networking.ConvertJsonValueToTime(rec[0])
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"error":    err,
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatLastOHLC: networking.ConvertJsonValueToTime")
-				continue
-			}
-
-			close, err := networking.ConvertJsonValueToFloat64(rec[1])
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"error":    err,
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatLastOHLC: networking.ConvertJsonValueToFloat64")
-				continue
-			}
-
-			volume, err := networking.ConvertJsonValueToFloat64(rec[2])
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"error":    err,
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatLastOHLC: networking.ConvertJsonValueToFloat64")
-				continue
-			}
-
-			change, err := networking.ConvertJsonValueToFloat64(rec[2])
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"error":    err,
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatLastOHLC: networking.ConvertJsonValueToFloat64")
-				continue
-			}
-
-			if mohlc, ok := imohlc[timestamp.UnixNano()]; !ok {
-
-				logger.WithFields(logrus.Fields{
-					"error":    "timestamp not matching",
-					"exchange": ind.exchange,
-					"market":   market,
-				}).Error("formatLastOHLC")
-
-			} else {
-				mohlc[market] = &ohlc{
-					close:  close,
-					volume: volume,
-					change: change,
-				}
-			}
-		}
-	}
-
+	imohlc := formatOHLC(ind, res)
 	return imohlc
 }
