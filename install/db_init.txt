@@ -1,0 +1,40 @@
+#Before launching, make sure you have an admin user, if not 
+#create user "admin" with password 'password' with all privileges
+
+#To launch: influx -ssl -username admin -password password -import -path=db_init.txt
+
+#DDL
+DROP DATABASE poloniex
+CREATE DATABASE poloniex
+DROP RETENTION POLICY autogen on poloniex
+CREATE RETENTION POLICY thirty_days on poloniex DURATION 30d REPLICATION 1 SHARD DURATION 1h DEFAULT
+
+DROP DATABASE bittrex
+CREATE DATABASE bittrex
+DROP RETENTION POLICY autogen on bittrex
+CREATE RETENTION POLICY thirty_days on bittrex DURATION 30d REPLICATION 1 SHARD DURATION 1h DEFAULT
+
+DROP DATABASE coinmarketcap
+CREATE DATABASE coinmarketcap
+DROP RETENTION POLICY autogen on coinmarketcap
+CREATE RETENTION POLICY thirty_days on coinmarketcap DURATION 30d REPLICATION 1 SHARD DURATION 1h DEFAULT
+
+DROP DATABASE metrics
+CREATE DATABASE metrics
+DROP RETENTION POLICY autogen on metrics
+CREATE RETENTION POLICY autogen_monthly_sharded on metrics DURATION INF REPLICATION 1 SHARD DURATION 30d DEFAULT
+
+CREATE USER ingest WITH PASSWORD 'ingestpass'
+GRANT ALL ON poloniex TO ingest
+GRANT WRITE ON bittrex TO ingest
+GRANT WRITE ON coinmarketcap TO ingest
+
+CREATE USER metrics WITH PASSWORD 'metricspass'
+GRANT READ ON poloniex TO metrics
+GRANT READ ON bittrex TO metrics
+GRANT READ ON coinmarketcap TO metrics
+GRANT ALL ON metrics to metrics
+
+# DML
+# CONTEXT-DATABASE: poloniex
+# CONTEXT-RETENTION-POLICY: one_day

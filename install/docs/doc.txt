@@ -1,0 +1,64 @@
+###################### Ingestion ######################
+
+TZ=UTC go run examples.go 2>&1 | tee -a ingestion.log
+tail -f ingestion.log | grep -e ERRO -e WARN --color=never
+tail -f ingestion.log | grep -v batchs --color=never
+
+
+###################### Metrics ######################
+
+TZ=UTC go run examples.go 2>&1 | tee -a metrics.log
+
+
+###################### SSL ######################
+
+generate ssl certificate:
+
+sudo openssl req -x509 -nodes -newkey rsa:2048 -keyout /etc/ssl/influxdb-selfsigned-key.pem -out /etc/ssl/influxdb-selfsigned-cert.pem -days 1000
+
+CN must match the domain (localhost)
+
+Add ssl certificate to keychain system as a root and always trust for ssl connection 
+
+
+###################### Influxdb ######################
+
+influxd -config influxdb.conf
+
+backup:
+#Db running
+influxd backup ./backupmeta
+influxd backup -database poloniex ./backupdata
+influxd backup -database bittrex ./backupdata
+influxd backup -database coinmarketcap ./backupdata
+
+#Db shutdown
+influxd restore -metadir .influxdb/meta backupmeta
+influxd restore -database poloniex -datadir .influxdb/data backupdata
+influxd restore -database bittrex -datadir .influxdb/data backupdata
+influxd restore -database coinmarketcap -datadir .influxdb/data backupdata
+
+
+###################### Chronograf ######################
+
+Chronograf (see github for installation)
+chronograf --cert=/etc/ssl/influxdb-selfsigned-cert.pem --key=/etc/ssl/influxdb-selfsigned-key.pem
+(use insecureSkipVerify to true)
+
+
+###################### Telegraf ######################
+
+telegraf -config telegraf.conf
+
+
+###################### CLI ######################
+
+influx -ssl -host localhost
+auth admin password
+
+# Average writes / second grouped in 10s intervals
+SELECT non_negative_derivative(mean("pointReq"), 1s) FROM "_internal"."monitor"."write" WHERE time > now() - 1m GROUP BY time(10s)
+
+# Average queries / second grouped in 10s intervals (This won't include all queries. It's just a snapshot taken every 10s of the of the number of queries then currently running. The system does not yet record or count every submitted query.)
+SELECT non_negative_derivative(mean("queryReq"), 1s) FROM "_internal"."monitor"."httpd" WHERE time > now() - 1m GROUP BY time(10s)
+

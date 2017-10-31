@@ -1,0 +1,86 @@
+###################### Schema ######################
+
+
+InfluxDB Schema and Infos
+
+retention policy: autogen_montly_sharded (inf with 1month shard)
+
+
+DATABASE poloniex
+
+m:book_updates:
+timestamp 
+f:sequence f:rate f:quantity f:total
+t:order_type t:market t:source
+
+m:trade_updates:
+timestamp f:sequence f:trade_id f:rate f:quantity f:total
+t:order_type t:market t:source
+
+m:book_orders:
+timestamp f:sequence f:rate f:quantity f:cumulative_sum
+t:order_type t:market t:source
+
+m:book_orders_last_check:
+timestamp f:bid_depth f:ask_depth
+t:market t:source
+
+m:ticks:
+timestamp f:last f:lowest_ask f:highest_bid f:percent_change f:base_volume f:quote_volume f:is_frozen f:high_24hr f:low_24hr
+t:market t:source
+
+
+DATABASE bittrex
+
+m:market_summaries:
+timestamp f:high f:low f:volume f:last f:base_volume f:bid f:ask f:open_buy_orders f:open_sell_orders f:prev_day f:created
+t:market t:source
+
+m:market_histories:
+timestamp f:id f:quantity f:rate f:total f:fill_type f:order_type
+t:market t:source
+
+m:book_orders:
+timestamp f:rate f:quantity f:cumulative_sum
+t:order_type t:market t:source
+
+m:book_orders_last_check:
+timestamp f:bid_depth f:ask_depth
+t:market t:source
+
+
+DATABASE coinmarketcap
+
+m:ticks:
+timestamp f:id f:name f:rank f:price_usd f:price_btc f:24h_volume_usd f:market_cap_usd f:available_supply f:total_supply f:percent_change_1h f:percent_change_24h f:percent_change_7d
+t:symbol t:source
+
+m:global_data
+timestamp f:total_market_cap_usd f:total_24h_volume_usd f:bitcoin_percentage_of_market_cap f:active_currencies f:active_assets f:active_markets
+t:source
+
+
+
+retention policy: autogen_montly_sharded (inf with 1month shard)
+
+DATABASE metrics
+
+m:market_depths
+timestamp(accurate) f:bid_depth f:ask_depth f:ratio
+t:market t:exchange t:interval
+
+m:ohlc_period
+timestamp(beginning) f:volume f:quantity f:weighted_average f:open f:high f:last f: f:close f:change f:change_percent
+t:market t:exchange
+
+m:obv_period
+timestamp(beginning) f:obv
+t:market t:exchange
+
+m:ma_period
+timestamp(beginning) f:sma_{length} f:ema_{length}
+t:market t:exchange
+
+m:rsi_period
+timestamp(beginning) f:rsi_{length}
+t:market t:exchange
