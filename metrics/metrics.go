@@ -141,7 +141,7 @@ func ComputeMetrics() {
 		dbClient,
 	})
 
-	//go computeMarketDepths()
+	go computeMarketDepths()
 	go computeBaseOHLC()
 }
 
