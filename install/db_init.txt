@@ -37,4 +37,4 @@ GRANT ALL ON metrics to metrics
 
 # DML
 # CONTEXT-DATABASE: poloniex
-# CONTEXT-RETENTION-POLICY: one_day
+# CONTEXT-RETENTION-POLICY: thirty_days

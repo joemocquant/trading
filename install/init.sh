@@ -9,9 +9,9 @@ if [ $? = 0 ]; then
     echo "Existing influxdb server stopped"
 fi
 
-rm -rf ~/.influxdb
+rm -rf /tmp/.influxdb
 if [ $? = 0 ]; then
-    echo "~/.influxdb removed"
+    echo "/tmp/.influxdb removed"
 fi
 
 influxd -config confs/influxdb.conf > /dev/null 2>&1 &
@@ -54,7 +54,5 @@ fi
 # if [ $? = 0 ]; then
 #     echo "Continuous queries (sma) created for Bittrex"
 # fi
-
-
 
 pkill influxd
