@@ -18,7 +18,7 @@ influxd -config confs/influxdb.conf > /dev/null 2>&1 &
 
 sleep 1
 
-influx -ssl -execute $'create user "admin" with password \'password\' with all privileges'
+influx -ssl -execute "create user "admin" with password 'password' with all privileges"
 if [ $? = 0 ]; then
     echo "Admin user created"
 fi
