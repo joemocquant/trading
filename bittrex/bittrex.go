@@ -5,11 +5,11 @@ import (
 	"io/ioutil"
 	"sync"
 	"time"
-	"trading/api/bittrex/publicapi"
 	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/bittrex-api/publicapi"
+	"github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 

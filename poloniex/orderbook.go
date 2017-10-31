@@ -2,11 +2,11 @@ package poloniex
 
 import (
 	"time"
-	"trading/api/poloniex/publicapi"
 	"trading/networking"
 	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/poloniex-api/publicapi"
 )
 
 func ingestOrderBooks() {

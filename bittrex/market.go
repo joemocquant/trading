@@ -2,8 +2,9 @@ package bittrex
 
 import (
 	"time"
-	"trading/api/bittrex/publicapi"
 	"trading/networking"
+
+	publicapi "github.com/joemocquant/bittrex-api/publicapi"
 )
 
 func checkMarkets() {

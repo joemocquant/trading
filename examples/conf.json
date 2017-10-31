@@ -23,7 +23,7 @@
         "ticks_measurement": "ticks"
       },
       "public_ticks_check_period_sec": 30,
-      "market_check_period_min": 1,
+      "market_check_period_min": 2,
       "missing_trades_check_period_sec": 30,
       "order_books_check_period_sec": 30,
       "flush_batchs_period_ms": 1000,
@@ -68,7 +68,8 @@
     "wss_uri": "wss://api.poloniex.com",
     "realm": "realm1",
     "log_level": "debug",
-    "timeout_sec": 30
+    "timeout_sec": 30,
+    "topic_timeout_min": 2
   },
 
   "bittrex_public_api": {

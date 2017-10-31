@@ -2,11 +2,11 @@ package coinmarketcap
 
 import (
 	"time"
-	"trading/api/coinmarketcap"
 	"trading/networking"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	coinmarketcap "github.com/joemocquant/cmc-api"
+	"github.com/sirupsen/logrus"
 )
 
 func ingestGlobalData() {

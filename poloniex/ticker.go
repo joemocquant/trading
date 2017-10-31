@@ -2,12 +2,12 @@ package poloniex
 
 import (
 	"time"
-	"trading/api/poloniex/publicapi"
-	"trading/api/poloniex/pushapi"
 	"trading/networking"
 	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/poloniex-api/publicapi"
+	pushapi "github.com/joemocquant/poloniex-api/pushapi"
 )
 
 func ingestTicks() {

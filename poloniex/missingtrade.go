@@ -3,12 +3,12 @@ package poloniex
 import (
 	"fmt"
 	"time"
-	"trading/api/poloniex/publicapi"
 	"trading/networking"
 	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/poloniex-api/publicapi"
+	"github.com/sirupsen/logrus"
 )
 
 func ingestMissingTrades() {

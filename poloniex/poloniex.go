@@ -5,12 +5,12 @@ import (
 	"io/ioutil"
 	"sync"
 	"time"
-	"trading/api/poloniex/publicapi"
-	"trading/api/poloniex/pushapi"
 	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/poloniex-api/publicapi"
+	pushapi "github.com/joemocquant/poloniex-api/pushapi"
+	"github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 

@@ -3,11 +3,11 @@ package coinmarketcap
 import (
 	"encoding/json"
 	"io/ioutil"
-	"trading/api/coinmarketcap"
 	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	coinmarketcap "github.com/joemocquant/cmc-api"
+	"github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 

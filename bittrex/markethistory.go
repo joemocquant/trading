@@ -2,11 +2,11 @@ package bittrex
 
 import (
 	"time"
-	"trading/api/bittrex/publicapi"
 	"trading/networking"
 	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/bittrex-api/publicapi"
 )
 
 func ingestMarketHistories() {

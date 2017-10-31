@@ -2,12 +2,13 @@ package poloniex
 
 import (
 	"time"
-	"trading/api/poloniex/publicapi"
-	"trading/api/poloniex/pushapi"
+
 	"trading/networking"
 	"trading/networking/database"
 
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	publicapi "github.com/joemocquant/poloniex-api/publicapi"
+	pushapi "github.com/joemocquant/poloniex-api/pushapi"
 )
 
 func ingestMarkets() {
@@ -82,12 +83,36 @@ func ingestNewMarkets() {
 			go getMarketNewPoints(marketUpdater, market)
 		}(market)
 	}
+
+	unsubscribeDelistedMarkets(tickers)
+}
+
+func unsubscribeDelistedMarkets(tickers publicapi.Ticks) {
+
+	updaters.Lock()
+	for market, _ := range updaters.mus {
+		if _, ok := tickers[market]; !ok {
+			logger.Infof("Unsubscribing %s markets", market)
+			pushClient.UnsubscribeMarket(market)
+			delete(updaters.mus, market)
+		}
+	}
+	updaters.Unlock()
 }
 
 func getMarketNewPoints(marketUpdater pushapi.MarketUpdater, market string) {
 
 	for {
 		marketUpdates := <-marketUpdater
+
+		if marketUpdates == nil {
+
+			updaters.Lock()
+			defer updaters.Unlock()
+
+			delete(updaters.mus, market)
+			return
+		}
 
 		go func(marketUpdates *pushapi.MarketUpdates) {
 
