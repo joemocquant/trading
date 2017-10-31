@@ -7,8 +7,8 @@ import (
 	"trading/networking"
 	"trading/networking/database"
 
-	"github.com/Sirupsen/logrus"
 	ifxClient "github.com/influxdata/influxdb/client/v2"
+	"github.com/sirupsen/logrus"
 )
 
 type orderBooks map[string]*orderBook
