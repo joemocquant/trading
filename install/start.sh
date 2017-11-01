@@ -9,4 +9,4 @@ TZ=UTC go run examples.go 2>&1 | tee -a ingestion.log &
 
 
 cd ../../metrics/examples
-TZ=UTC go run examples.go 2>&1 | tee -a metrics.log &
+TZ=UTC go run examples.go 2>&1 | tee -a metrics.log
