@@ -48,5 +48,5 @@ RUN influxd -config confs/influxdb.conf > /dev/null 2>&1 &
 WORKDIR ../ingestion/examples
 RUN TZ=UTC go run examples.go 2>&1 | tee -a ingestion.log
 
-WORKIDR ../../metrics/examples
+WORKDIR ../../metrics/examples
 RUN TZ=UTC go run examples.go 2>&1 | tee -a metrics.log
