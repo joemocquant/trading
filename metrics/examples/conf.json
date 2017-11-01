@@ -13,8 +13,8 @@
 
     "log_level": "debug",
 
-    "flush_batchs_period_ms": 500,
-    "flush_capacity": 5000,
+    "flush_batchs_period_ms": 1500,
+    "flush_capacity": 15000,
 
     "ohlc_periods": ["30s", "1m", "5m", "10m", "30m",
       "1h", "3h", "6h", "12h","24h", "168h", "672h"],

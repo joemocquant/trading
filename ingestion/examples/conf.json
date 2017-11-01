@@ -26,8 +26,8 @@
       "market_check_period_min": 2,
       "missing_trades_check_period_sec": 30,
       "order_books_check_period_sec": 30,
-      "flush_batchs_period_ms": 1000,
-      "flush_capacity": 5000
+      "flush_batchs_period_ms": 3000,
+      "flush_capacity": 15000
     },
 
     "bittrex": {
@@ -42,8 +42,8 @@
       "markets_check_period_min": 5,
       "market_histories_check_period_sec": 30,
       "order_books_check_period_sec": 15,
-      "flush_batchs_period_sec": 1,
-      "flush_capacity": 5000
+      "flush_batchs_period_sec": 3,
+      "flush_capacity": 15000
     },
 
     "coinmarketcap": {
