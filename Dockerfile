@@ -41,12 +41,5 @@ RUN git clone https://github.com/joemocquant/trading.git
 WORKDIR trading/install
 RUN ./init.sh
 
-#Launch database server
-RUN influxd -config confs/influxdb.conf > /dev/null 2>&1 &
-
-#Ingesting
-WORKDIR ../ingestion/examples
-RUN TZ=UTC go run examples.go 2>&1 | tee -a ingestion.log
-
-WORKDIR ../../metrics/examples
-RUN TZ=UTC go run examples.go 2>&1 | tee -a metrics.log
+#Launch database server + ingestion processes
+CMD ./start.sh
